@@ -25,9 +25,16 @@ export function mockOutput(operation: string, user: string): unknown {
           { question: "How many members did the club have when you left?", why: "Quantifies the outcome.", category: "outcome", importance: "critical" },
         ],
       };
+    case "section_questions":
+      return {
+        questions: [
+          { entry_ref: "E1", question: "How many people were involved, and what exactly was your part?", why: "Specific scale and contribution make the entry credible.", focus: "missing_fact" },
+          { entry_ref: "", question: "Is there a setback in this area that taught you something?", why: "Essays often ask for evidence of resilience.", focus: "new_entry" },
+        ],
+      };
     case "evidence_recommendation":
       return {
-        recommendations: [{ ref: "S1", reason: "Directly shows leadership.", use_for: "Main example", strength: "strong" }],
+        recommendations: [{ ref: "E1", reason: "Directly shows leadership.", use_for: "Main example", strength: "strong" }],
         not_recommended: [],
         conflicts: [],
         missing: [],
@@ -80,7 +87,7 @@ export function mockOutput(operation: string, user: string): unknown {
       return {
         thesis: "Leading a community coding club prepared me to lead larger digital inclusion work.",
         sections: [
-          { heading: "Opening", purpose: "Engage", key_points: ["The first session"], evidence_refs: ["S1"], word_allocation: 150, requirements_addressed: ["Leadership"] },
+          { heading: "Opening", purpose: "Engage", key_points: ["The first session"], evidence_refs: ["E1"], word_allocation: 150, requirements_addressed: ["Leadership"] },
           { heading: "Future", purpose: "Goals", key_points: ["Next steps"], evidence_refs: [], word_allocation: 150, requirements_addressed: ["Career goals"] },
         ],
         gaps: [],
@@ -89,7 +96,7 @@ export function mockOutput(operation: string, user: string): unknown {
     case "draft":
       return {
         sections: [
-          { heading: "", paragraphs: [{ text: "The first session of the coding club had four students and one borrowed laptop.", evidence_refs: ["S1"] }] },
+          { heading: "", paragraphs: [{ text: "The first session of the coding club had four students and one borrowed laptop.", evidence_refs: ["E1"] }] },
           { heading: "", paragraphs: [{ text: "This programme would help me turn that small start into a wider digital inclusion initiative.", evidence_refs: [] }] },
         ],
         flags: { unverified_claims: [], missing_information: [], requirements_not_addressed: [], source_conflicts: [], notes: ["Test fixture draft."] },

@@ -1,39 +1,30 @@
 // Assembles only the information an AI operation needs, from data already loaded under RLS.
 // Pure functions: no I/O, so retrieval and context budgets are unit-tested directly.
 
-import { ESSAY_TYPE_GUIDANCE, FUTURE_SECTIONS, MAX_DOCUMENT_EXCERPT_CHARS, type ExemplarAspect } from "@/lib/domain/constants";
+import { ESSAY_TYPE_GUIDANCE, MAX_DOCUMENT_EXCERPT_CHARS, type ExemplarAspect } from "@/lib/domain/constants";
+import { isFutureSection, sectionTitle, usableByAi } from "@/lib/library/sections";
 import { keywords, splitItems } from "@/lib/text/keywords";
-import type {
-  Application,
-  Essay,
-  PersonalEvidence,
-  SelectedLesson,
-  SourceRefs,
-  Story,
-  SupportingDocument,
-  WritingPreferences,
-} from "@/lib/domain/types";
+import type { Application, Essay, LibraryEntry, SelectedLesson, SourceRefs, SupportingDocument, WritingPreferences } from "@/lib/domain/types";
 
 export interface EssayContextData {
   essay: Essay;
   application: Application;
   preferences: WritingPreferences;
-  evidence: PersonalEvidence[];
-  stories: Story[];
+  entries: LibraryEntry[];
   documents: SupportingDocument[];
-  linked: { storyIds: string[]; evidenceIds: string[]; documentIds: string[] };
+  /** Entries and documents the user linked to this essay. Linking an "Ask first" entry approves it. */
+  linked: { entryIds: string[]; documentIds: string[] };
   lessons: SelectedLesson[];
   exemplarTitles: Record<string, string>;
 }
 
-export type RefTarget = { type: "story" | "evidence" | "document" | "lesson"; id: string };
+export type RefTarget = { type: "entry" | "document" | "lesson"; id: string };
 
 /** Limits that keep prompts focused and well inside the context window. */
 export const CONTEXT_LIMITS = {
-  autoStories: 6,
-  autoEvidence: 14,
-  maxStories: 12,
-  maxEvidence: 40,
+  autoEntries: 12,
+  maxEntries: 30,
+  narrativeChars: 4000,
   maxDocuments: 6,
   totalDocumentChars: 24000,
   maxLessons: 20,
@@ -47,14 +38,26 @@ export function essayQueryText(essay: Pick<Essay, "prompt" | "required_themes" |
   return [essay.title, essay.prompt, essay.required_themes.join(" "), essay.selection_criteria ?? "", application?.selection_criteria ?? ""].join("\n");
 }
 
-export function storyText(s: Story): string {
-  return [s.title, s.context, s.challenge, s.actions, s.outcome, s.measurable_impact, s.lessons, s.motivation, s.skills.join(" "), s.related_criteria.join(" "), s.tags.join(" ")]
+export function entryText(e: Pick<LibraryEntry, "title" | "summary" | "organisation" | "role" | "context" | "challenge" | "actions" | "outcome" | "measurable_impact" | "lessons" | "motivation" | "narrative" | "skills" | "related_criteria" | "tags" | "figures">): string {
+  return [e.title, e.summary, e.organisation, e.role, e.figures, e.context, e.challenge, e.actions, e.outcome, e.measurable_impact, e.lessons, e.motivation, e.narrative, e.skills.join(" "), e.related_criteria.join(" "), e.tags.join(" ")]
     .filter(Boolean)
     .join(" ");
 }
 
-export function evidenceText(e: PersonalEvidence): string {
-  return [e.title, e.details, e.organisation].filter(Boolean).join(" ");
+/**
+ * The entries the AI may see for this essay. Private: never. Ask first: only when linked
+ * (approved) for this essay. Available: when linked, or chosen automatically for relevance.
+ */
+export function eligibleEntries(data: Pick<EssayContextData, "entries" | "linked">): LibraryEntry[] {
+  return data.entries.filter((e) => !e.archived_at && usableByAi(e.privacy, data.linked.entryIds.includes(e.id)));
+}
+
+/** "Ask first" entries relevant to the essay but not yet approved for it — computed locally, never sent to the AI. */
+export function pendingApprovals(data: Pick<EssayContextData, "entries" | "linked" | "essay" | "application">, limit = 5): Ranked<LibraryEntry>[] {
+  const candidates = data.entries.filter((e) => !e.archived_at && e.privacy === "ask" && !data.linked.entryIds.includes(e.id));
+  return rank(essayQueryText(data.essay, data.application), candidates, entryText)
+    .filter((r) => r.score > 0)
+    .slice(0, limit);
 }
 
 export interface Ranked<T> {
@@ -101,8 +104,8 @@ export function excerpt(text: string, query: string, maxChars: number): string {
 // ---------------------------------------------------------------------------
 
 /** How a fact may be used: accomplished facts as facts, aspirations only as plans, unverified only flagged. */
-export function evidenceStatus(e: Pick<PersonalEvidence, "classification" | "section">): "accomplished" | "aspiration" | "reflection" | "unverified" {
-  if (e.classification === "goal_aspiration" || FUTURE_SECTIONS.includes(e.section)) return "aspiration";
+export function evidenceStatus(e: Pick<LibraryEntry, "classification" | "section">): "accomplished" | "aspiration" | "reflection" | "unverified" {
+  if (e.classification === "goal_aspiration" || isFutureSection(e.section)) return "aspiration";
   if (e.classification === "unverified") return "unverified";
   if (e.classification === "personal_reflection") return "reflection";
   return "accomplished";
@@ -187,7 +190,7 @@ export function buildEssayContext(data: EssayContextData, options: ContextOption
   const opts = { includeEvidence: true, includeDocuments: true, includeLessons: true, includeOutline: false, ...options };
   const query = essayQueryText(essay, application);
   const refs: Record<string, RefTarget> = {};
-  const sourceRefs: SourceRefs = { story_ids: [], evidence_ids: [], document_ids: [], exemplar_ids: [], lesson_ids: [] };
+  const sourceRefs: SourceRefs = { entry_ids: [], document_ids: [], exemplar_ids: [], lesson_ids: [] };
 
   const brief: Record<string, unknown> = {
     requirements: requirementsBrief(essay, application),
@@ -197,55 +200,43 @@ export function buildEssayContext(data: EssayContextData, options: ContextOption
 
   let autoSelected = false;
   if (opts.includeEvidence) {
-    const anyLinked = data.linked.storyIds.length + data.linked.evidenceIds.length > 0;
-    autoSelected = !anyLinked;
-    const activeStories = data.stories.filter((s) => !s.archived_at);
-    const activeEvidence = data.evidence.filter((e) => !e.archived_at);
-    const stories = anyLinked
-      ? activeStories.filter((s) => data.linked.storyIds.includes(s.id)).slice(0, CONTEXT_LIMITS.maxStories)
-      : rank(query, activeStories, storyText).filter((r) => r.score > 0).slice(0, CONTEXT_LIMITS.autoStories).map((r) => r.item);
-    // Linked items come first; core background (education, goals) is always useful context.
-    const evidence = anyLinked
-      ? activeEvidence.filter((e) => data.linked.evidenceIds.includes(e.id)).slice(0, CONTEXT_LIMITS.maxEvidence)
-      : rank(query, activeEvidence, evidenceText)
-          .filter((r) => r.score > 0 || ["education", "career_goals", "background"].includes(r.item.section))
-          .slice(0, CONTEXT_LIMITS.autoEvidence)
-          .map((r) => r.item);
+    const eligible = eligibleEntries(data);
+    const linked = eligible.filter((e) => data.linked.entryIds.includes(e.id));
+    autoSelected = linked.length === 0;
+    // Automatic selection only ever uses entries marked Available.
+    const chosen = autoSelected
+      ? rank(query, eligible.filter((e) => e.privacy === "available"), entryText)
+          .filter((r) => r.score > 0 || r.item.section === "education" || r.item.section === "future_goals")
+          .slice(0, CONTEXT_LIMITS.autoEntries)
+          .map((r) => r.item)
+      : linked.slice(0, CONTEXT_LIMITS.maxEntries);
 
-    brief.stories = stories.map((s, i) => {
-      const alias = `S${i + 1}`;
-      refs[alias] = { type: "story", id: s.id };
-      sourceRefs.story_ids!.push(s.id);
-      return compact({
-        ref: alias,
-        title: s.title,
-        period: clean(s.period),
-        context: clean(s.context),
-        challenge_or_opportunity: clean(s.challenge),
-        applicant_actions: clean(s.actions),
-        outcome: clean(s.outcome),
-        measurable_impact: clean(s.measurable_impact),
-        lessons_learned: clean(s.lessons),
-        motivation: clean(s.motivation),
-        skills: s.skills,
-        related_criteria: s.related_criteria,
-        verification: s.verification_status,
-      });
-    });
-    brief.profile_evidence = evidence.map((e, i) => {
+    brief.evidence = chosen.map((e, i) => {
       const alias = `E${i + 1}`;
-      refs[alias] = { type: "evidence", id: e.id };
-      sourceRefs.evidence_ids!.push(e.id);
+      refs[alias] = { type: "entry", id: e.id };
+      sourceRefs.entry_ids!.push(e.id);
       return compact({
         ref: alias,
-        section: e.section,
+        section: sectionTitle(e.section),
         title: e.title,
-        details: clean(e.details),
+        summary: clean(e.summary),
         organisation: clean(e.organisation),
+        role: clean(e.role),
+        location: clean(e.location),
         period: clean(e.period),
+        figures: clean(e.figures),
+        context: clean(e.context),
+        challenge_or_opportunity: clean(e.challenge),
+        applicant_actions: clean(e.actions),
+        outcome: clean(e.outcome),
+        measurable_impact: clean(e.measurable_impact),
+        lessons_learned: clean(e.lessons),
+        motivation: clean(e.motivation),
+        in_their_own_words: clean(e.narrative)?.slice(0, CONTEXT_LIMITS.narrativeChars),
+        skills: e.skills,
+        related_criteria: e.related_criteria,
         classification: e.classification,
         status: evidenceStatus(e),
-        source: clean(e.source),
       });
     });
     if (autoSelected) {
@@ -295,13 +286,13 @@ export function buildEssayContext(data: EssayContextData, options: ContextOption
   return { brief: compact(brief), refs, sourceRefs, autoSelected };
 }
 
-/** Maps model-supplied aliases (S1, E2…) back to record IDs, ignoring anything unknown. */
+/** Maps model-supplied aliases (E1, D2…) back to record IDs, ignoring anything unknown. */
 export function resolveRefs(aliases: string[], refs: Record<string, RefTarget>): SourceRefs {
-  const out: SourceRefs = { story_ids: [], evidence_ids: [], document_ids: [], lesson_ids: [] };
+  const out: SourceRefs = { entry_ids: [], document_ids: [], lesson_ids: [] };
   for (const a of aliases) {
     const t = refs[a.trim().toUpperCase()];
     if (!t) continue;
-    const key = `${t.type === "evidence" ? "evidence" : t.type}_ids` as keyof SourceRefs;
+    const key = `${t.type}_ids` as keyof SourceRefs;
     const list = (out[key] ??= []);
     if (!list.includes(t.id)) list.push(t.id);
   }

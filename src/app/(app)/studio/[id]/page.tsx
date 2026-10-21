@@ -6,6 +6,7 @@ import { isAiConfigured } from "@/lib/ai/client";
 import { EXEMPLAR_SPEC_VERSION } from "@/lib/ai/prompts/exemplars";
 import type { EssayReview, EssayVersion, ExportSettings, Profile } from "@/lib/domain/types";
 import { loadEssayBundle } from "@/server/internal/essay-data";
+import { pendingApprovals } from "@/lib/ai/context";
 import { ESSAY_SUMMARY_COLUMNS, type EssaySummary } from "@/server/queries";
 import { Workspace } from "./workspace";
 import type { WorkspaceData } from "./types";
@@ -60,8 +61,8 @@ export default async function EssayWorkspacePage({ params }: { params: Promise<{
     versions: versions ?? [],
     checksReview: (reviews ?? []).find((r) => r.kind === "checks") ?? null,
     aiReview: (reviews ?? []).find((r) => r.kind === "ai") ?? null,
-    stories: bundle.stories.map((s) => ({ id: s.id, title: s.title, outcome: s.outcome, verification: s.verification_status, tags: s.tags })),
-    evidence: bundle.evidence.map((e) => ({ id: e.id, title: e.title, section: e.section, classification: e.classification })),
+    entries: bundle.entries.map((e) => ({ id: e.id, title: e.title, section: e.section, also_in: e.also_in, classification: e.classification, privacy: e.privacy, period: e.period })),
+    pendingApprovals: pendingApprovals(bundle).map((r) => r.item.id),
     documents: bundle.documents.map((d) => ({ id: d.id, title: d.title, doc_type: d.doc_type, extraction_status: d.extraction_status })),
     links: bundle.links,
     lessons: bundle.lessons,

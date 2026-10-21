@@ -21,16 +21,18 @@ insert into essay.applications (id, name, institution, programme, category)
 insert into essay.application_requirements (application_id, title) values ('a0000000-0000-0000-0000-000000000001', 'Two references');
 insert into essay.supporting_documents (id, application_id, title, doc_type, file_path)
   values ('d0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'CV', 'cv', '00000000-0000-0000-0000-00000000000a/cv.pdf');
-insert into essay.personal_evidence (id, section, title, classification)
+insert into essay.library_entries (id, section, title, classification)
   values ('e0000000-0000-0000-0000-000000000001', 'education', 'BSc Computer Science', 'verified_fact');
-insert into essay.story_bank_items (id, title) values ('50000000-0000-0000-0000-000000000001', 'Founded a coding club');
+insert into essay.library_entries (id, section, title, privacy) values ('50000000-0000-0000-0000-000000000001', 'leadership', 'Founded a coding club', 'available');
+insert into essay.entry_documents (entry_id, document_id) values ('50000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001');
+insert into essay.library_section_settings (section, default_privacy) values ('health', 'private');
 insert into essay.exemplars (id, title, source_text, provenance)
   values ('70000000-0000-0000-0000-000000000001', 'Sample SoP', 'An exemplar essay text.', 'official_sample');
 insert into essay.exemplar_application_links (exemplar_id, application_id)
   values ('70000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001');
 insert into essay.essays (id, application_id, title, prompt, max_words)
   values ('e5000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Leadership', 'Describe your leadership.', 500);
-insert into essay.essay_evidence_links (essay_id, story_id) values ('e5000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001');
+insert into essay.essay_evidence_links (essay_id, entry_id) values ('e5000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001');
 insert into essay.essay_evidence_links (essay_id, document_id) values ('e5000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001');
 insert into essay.ai_generation_jobs (id, kind, essay_id, idempotency_key, model, prompt_version)
   values ('10000000-0000-0000-0000-000000000001', 'draft', 'e5000000-0000-0000-0000-000000000001', 'key-1', 'claude-opus-5-5', 'v1');
@@ -72,9 +74,24 @@ do $$ begin
     raise exception 'empty evidence link accepted';
   exception when check_violation then null; end;
   begin
-    insert into essay.essay_evidence_links (essay_id, story_id) values ('e5000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001');
+    insert into essay.essay_evidence_links (essay_id, entry_id) values ('e5000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001');
     raise exception 'duplicate story link accepted';
   exception when unique_violation then null; end;
+end $$;
+
+-- Privacy and sections are constrained; an entry can only cross-list into real sections.
+do $$ begin
+  begin
+    insert into essay.library_entries (section, title, privacy) values ('health', 'x', 'public');
+    raise exception 'unknown privacy accepted';
+  exception when check_violation then null; end;
+  begin
+    insert into essay.library_entries (section, title, also_in) values ('health', 'x', array['nonsense']);
+    raise exception 'unknown cross-listed section accepted';
+  exception when check_violation then null; end;
+  if (select privacy from essay.library_entries where id = '50000000-0000-0000-0000-000000000001') <> 'available' then
+    raise exception 'privacy not stored';
+  end if;
 end $$;
 
 -- Word limits must be coherent; provenance must be a known value.
@@ -109,11 +126,11 @@ do $$ begin
 end $$;
 
 -- Deleting a story removes its essay links but keeps the essay.
-insert into essay.story_bank_items (id, title) values ('50000000-0000-0000-0000-000000000002', 'Temporary story');
-insert into essay.essay_evidence_links (essay_id, story_id) values ('e5000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000002');
-delete from essay.story_bank_items where id = '50000000-0000-0000-0000-000000000002';
+insert into essay.library_entries (id, section, title) values ('50000000-0000-0000-0000-000000000002', 'background', 'Temporary story');
+insert into essay.essay_evidence_links (essay_id, entry_id) values ('e5000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000002');
+delete from essay.library_entries where id = '50000000-0000-0000-0000-000000000002';
 do $$ begin
-  if exists (select 1 from essay.essay_evidence_links where story_id = '50000000-0000-0000-0000-000000000002') then raise exception 'story link not cascaded'; end if;
+  if exists (select 1 from essay.essay_evidence_links where entry_id = '50000000-0000-0000-0000-000000000002') then raise exception 'story link not cascaded'; end if;
   if not exists (select 1 from essay.essays where id = 'e5000000-0000-0000-0000-000000000001') then raise exception 'essay removed with story'; end if;
 end $$;
 
@@ -122,13 +139,13 @@ insert into essay.applications (id, name) values ('a0000000-0000-0000-0000-00000
 insert into essay.essays (id, application_id, title) values ('e5000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', 'T');
 insert into essay.essay_versions (essay_id, content, source) values ('e5000000-0000-0000-0000-000000000002', '{}', 'manual');
 insert into essay.exemplar_application_links (exemplar_id, application_id) values ('70000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002');
-insert into essay.essay_evidence_links (essay_id, story_id) values ('e5000000-0000-0000-0000-000000000002', '50000000-0000-0000-0000-000000000001');
+insert into essay.essay_evidence_links (essay_id, entry_id) values ('e5000000-0000-0000-0000-000000000002', '50000000-0000-0000-0000-000000000001');
 delete from essay.applications where id = 'a0000000-0000-0000-0000-000000000002';
 do $$ begin
   if exists (select 1 from essay.essays where id = 'e5000000-0000-0000-0000-000000000002') then raise exception 'essay not cascaded'; end if;
   if exists (select 1 from essay.essay_versions where essay_id = 'e5000000-0000-0000-0000-000000000002') then raise exception 'versions not cascaded'; end if;
   if not exists (select 1 from essay.exemplars where id = '70000000-0000-0000-0000-000000000001') then raise exception 'shared exemplar removed'; end if;
-  if not exists (select 1 from essay.story_bank_items where id = '50000000-0000-0000-0000-000000000001') then raise exception 'shared story removed'; end if;
+  if not exists (select 1 from essay.library_entries where id = '50000000-0000-0000-0000-000000000001') then raise exception 'shared story removed'; end if;
 end $$;
 
 -- ---- User B must see nothing of A's ----
@@ -138,8 +155,8 @@ do $$
 declare n int;
 begin
   select (select count(*) from essay.applications) + (select count(*) from essay.application_requirements)
-       + (select count(*) from essay.supporting_documents) + (select count(*) from essay.personal_evidence)
-       + (select count(*) from essay.story_bank_items) + (select count(*) from essay.exemplars)
+       + (select count(*) from essay.supporting_documents) + (select count(*) from essay.library_entries)
+       + (select count(*) from essay.entry_documents) + (select count(*) from essay.library_section_settings) + (select count(*) from essay.exemplars)
        + (select count(*) from essay.exemplar_analyses) + (select count(*) from essay.exemplar_application_links)
        + (select count(*) from essay.exemplar_selected_lessons) + (select count(*) from essay.essays)
        + (select count(*) from essay.essay_versions) + (select count(*) from essay.essay_evidence_links)
@@ -154,7 +171,7 @@ end $$;
 update essay.applications set name = 'hijacked';
 update essay.essays set plain_text = 'hijacked';
 delete from essay.exemplars;
-delete from essay.story_bank_items;
+delete from essay.library_entries;
 
 -- B creates their own application and essay, then tries to attach A's records.
 insert into essay.applications (id, name) values ('a0000000-0000-0000-0000-00000000000b', 'B app');
@@ -166,12 +183,17 @@ do $$ begin
     raise exception 'B created an essay in A''s application';
   exception when insufficient_privilege then null; end;
   begin
-    insert into essay.essay_evidence_links (essay_id, story_id) values ('e5000000-0000-0000-0000-00000000000b', '50000000-0000-0000-0000-000000000001');
+    insert into essay.essay_evidence_links (essay_id, entry_id) values ('e5000000-0000-0000-0000-00000000000b', '50000000-0000-0000-0000-000000000001');
     raise exception 'B linked A''s story';
   exception when insufficient_privilege then null; end;
   begin
     insert into essay.essay_evidence_links (essay_id, document_id) values ('e5000000-0000-0000-0000-00000000000b', 'd0000000-0000-0000-0000-000000000001');
     raise exception 'B linked A''s document';
+  exception when insufficient_privilege then null; end;
+  begin
+    insert into essay.library_entries (id, section, title) values ('5b000000-0000-0000-0000-00000000000b', 'background', 'B entry');
+    insert into essay.entry_documents (entry_id, document_id) values ('5b000000-0000-0000-0000-00000000000b', 'd0000000-0000-0000-0000-000000000001');
+    raise exception 'B attached A''s document to an entry';
   exception when insufficient_privilege then null; end;
   begin
     insert into essay.exemplar_application_links (exemplar_id, application_id) values ('70000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-00000000000b');
@@ -206,7 +228,7 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a
 do $$ begin
   if (select name from essay.applications where id = 'a0000000-0000-0000-0000-000000000001') <> 'Chevening 2027' then raise exception 'B modified A''s application'; end if;
   if (select count(*) from essay.exemplars) <> 1 then raise exception 'B deleted A''s exemplar'; end if;
-  if (select count(*) from essay.story_bank_items) <> 1 then raise exception 'B deleted A''s story'; end if;
+  if (select count(*) from essay.library_entries) <> 2 then raise exception 'B deleted A''s entries'; end if;
   if exists (select 1 from essay.essays where plain_text = 'hijacked') then raise exception 'B modified A''s essay'; end if;
 end $$;
 
@@ -216,10 +238,10 @@ do $$ begin
   if not public.owns_evidence('3e000000-0000-0000-0000-000000000001') then raise exception 'letter studio owns_evidence broken'; end if;
   if (select count(*) from public.evidence) <> 1 then raise exception 'owner cannot read own letter studio evidence'; end if;
 end $$;
-insert into essay.story_bank_items (title, source_ref) values ('Imported', 'letter-studio:evidence:3e000000-0000-0000-0000-000000000001');
+insert into essay.library_entries (section, title, source_ref) values ('projects_research', 'Imported', 'letter-studio:evidence:3e000000-0000-0000-0000-000000000001');
 do $$ begin
   begin
-    insert into essay.story_bank_items (title, source_ref) values ('Imported twice', 'letter-studio:evidence:3e000000-0000-0000-0000-000000000001');
+    insert into essay.library_entries (section, title, source_ref) values ('projects_research', 'Imported twice', 'letter-studio:evidence:3e000000-0000-0000-0000-000000000001');
     raise exception 'duplicate import accepted';
   exception when unique_violation then null; end;
 end $$;
@@ -231,7 +253,7 @@ end $$;
 reset role;
 do $$ begin
   -- Nothing Essay Studio defines lives in public.
-  if exists (select 1 from pg_tables where schemaname = 'public' and tablename in ('applications', 'essays', 'story_bank_items', 'exemplars')) then
+  if exists (select 1 from pg_tables where schemaname = 'public' and tablename in ('applications', 'essays', 'library_entries', 'exemplars')) then
     raise exception 'essay studio table created in public';
   end if;
   if (select count(*) from pg_trigger where tgname in ('on_auth_user_created', 'essay_on_auth_user_created')) <> 2 then

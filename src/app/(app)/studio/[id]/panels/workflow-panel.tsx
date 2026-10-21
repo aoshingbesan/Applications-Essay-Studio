@@ -62,8 +62,7 @@ export function WorkflowPanel({ data, api, goTo }: { data: WorkspaceData; api: E
   const disabled = !api.aiAvailable || ai.busy !== null;
   const titleFor = (refs: SourceRefs) =>
     [
-      ...(refs.story_ids ?? []).map((id) => data.stories.find((s) => s.id === id)?.title),
-      ...(refs.evidence_ids ?? []).map((id) => data.evidence.find((e) => e.id === id)?.title),
+      ...(refs.entry_ids ?? []).map((id) => data.entries.find((e) => e.id === id)?.title),
       ...(refs.document_ids ?? []).map((id) => data.documents.find((d) => d.id === id)?.title),
     ].filter((x): x is string => Boolean(x));
 
@@ -94,7 +93,7 @@ export function WorkflowPanel({ data, api, goTo }: { data: WorkspaceData; api: E
     if (res?.ok) {
       setOutline(res.data.outline);
       setOutlineKey((k) => k + 1);
-      if (res.data.autoSelected) toast.info("No evidence was selected, so the most relevant stories and profile entries were used. Review them in the Evidence tab.");
+      if (res.data.autoSelected) toast.info("No evidence was selected, so the most relevant Available Story Bank entries were used. Review them in the Evidence tab.");
       api.refresh();
     }
   };

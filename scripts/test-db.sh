@@ -21,7 +21,11 @@ for f in "$ROOT"/supabase/tests/letter-studio/*.sql; do
   "${PSQL[@]}" -f "$f"
 done
 for f in "$ROOT"/supabase/migrations/*.sql; do
-  echo "applying $(basename "$f")"
+  name="$(basename "$f" .sql)"
+  # Optional data-migration checks: seed old-shape data before a migration, verify it after.
+  [ -f "$ROOT/supabase/tests/before_$name.sql" ] && "${PSQL[@]}" -f "$ROOT/supabase/tests/before_$name.sql"
+  echo "applying $name.sql"
   "${PSQL[@]}" -f "$f"
+  [ -f "$ROOT/supabase/tests/after_$name.sql" ] && "${PSQL[@]}" -f "$ROOT/supabase/tests/after_$name.sql"
 done
 "${PSQL[@]}" -f "$ROOT/supabase/tests/rls_isolation.sql"

@@ -7,9 +7,8 @@ import type {
   EssayVersion,
   EvidenceLink,
   ExportSettings,
-  PersonalEvidence,
+  LibraryEntry,
   SelectedLesson,
-  Story,
   SupportingDocument,
 } from "@/lib/domain/types";
 import type { EssaySummary } from "@/server/queries";
@@ -24,8 +23,9 @@ export interface WorkspaceData {
   versions: VersionSummary[];
   checksReview: EssayReview | null;
   aiReview: EssayReview | null;
-  stories: (Pick<Story, "id" | "title" | "outcome" | "tags"> & { verification: Story["verification_status"] })[];
-  evidence: Pick<PersonalEvidence, "id" | "title" | "section" | "classification">[];
+  entries: Pick<LibraryEntry, "id" | "title" | "section" | "also_in" | "classification" | "privacy" | "period">[];
+  /** Relevant "Ask first" entries not yet approved for this essay (ranked locally, never sent to the AI). */
+  pendingApprovals: string[];
   documents: Pick<SupportingDocument, "id" | "title" | "doc_type" | "extraction_status">[];
   links: EvidenceLink[];
   lessons: SelectedLesson[];

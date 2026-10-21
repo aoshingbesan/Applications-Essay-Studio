@@ -271,12 +271,16 @@ export async function duplicateVersion(essayId: string, versionId: string): Prom
 // Evidence links, gap answers and outline
 // ---------------------------------------------------------------------------
 
-const linkTarget = z.object({ type: z.enum(["story", "evidence", "document"]), id: z.string().uuid() });
+const linkTarget = z.object({ type: z.enum(["entry", "document"]), id: z.string().uuid() });
 
+/**
+ * Links a library entry or document to an essay. For an "Ask first" entry, linking is the
+ * user's approval to use it in this essay. Private entries can be linked but are never sent to the AI.
+ */
 export async function setEssayEvidenceLink(essayId: string, target: z.input<typeof linkTarget>, linked: boolean): Promise<ActionResult> {
   const t = linkTarget.safeParse(target);
   if (!id.safeParse(essayId).success || !t.success) return notFound;
-  const column = t.data.type === "story" ? "story_id" : t.data.type === "evidence" ? "evidence_id" : "document_id";
+  const column = t.data.type === "entry" ? "entry_id" : "document_id";
   return withUser(async ({ supabase }) => {
     if (linked) {
       const { count } = await supabase.from("essay_evidence_links").select("id", { count: "exact", head: true }).eq("essay_id", essayId);
@@ -287,7 +291,7 @@ export async function setEssayEvidenceLink(essayId: string, target: z.input<type
       if (error) return { ok: false, error: "Could not unlink the item." };
     }
     revalidatePath(`/studio/${essayId}`);
-    if (t.data.type === "story") revalidatePath(`/stories/${t.data.id}`);
+    if (t.data.type === "entry") revalidatePath(`/library/entry/${t.data.id}`);
     return { ok: true, data: undefined };
   });
 }

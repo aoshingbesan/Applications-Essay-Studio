@@ -69,6 +69,21 @@ export const evidenceRecommendationValidator = z.object({
 });
 export type EvidenceRecommendation = z.infer<typeof evidenceRecommendationValidator>;
 
+export const SECTION_QUESTION_FOCUS = ["missing_fact", "vague", "impact", "reflection", "evidence", "new_entry"] as const;
+
+export const sectionQuestionsValidator = z.object({
+  questions: z.array(
+    z.object({
+      // The entry the question is about (E1…), or "" for a suggestion to add a new entry.
+      entry_ref: str,
+      question: str,
+      why: str,
+      focus: z.enum(SECTION_QUESTION_FOCUS),
+    }),
+  ),
+});
+export type SectionQuestions = z.infer<typeof sectionQuestionsValidator>;
+
 // ---------------------------------------------------------------------------
 // Exemplar analysis, comparison and blueprint
 // ---------------------------------------------------------------------------

@@ -222,7 +222,7 @@ export function SettingsForms({ email, profile, ai }: { email: string; profile: 
           <ConfirmAction
             trigger={<Button variant="destructive">Delete my Essay Studio data</Button>}
             title="Delete all your Essay Studio data?"
-            description="Every application, essay, version, review, story, profile entry, document, exemplar and uploaded file in Essay Studio is permanently deleted. Your account and your Recommendation Letter Studio data are not affected."
+            description="Every application, essay, version, review, Story Bank entry, document, exemplar and uploaded file in Essay Studio is permanently deleted. Your account and your Recommendation Letter Studio data are not affected."
             requireText="DELETE"
             onConfirm={async (typed) => {
               if (handleResult(await deleteAllData(typed), "All data deleted") === null) return false;

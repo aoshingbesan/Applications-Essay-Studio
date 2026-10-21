@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
 import { jsonError, readJson, uuidParam } from "@/lib/api";
-import { buildEssayContext, resolveRefs } from "@/lib/ai/context";
+import { CONTEXT_LIMITS, buildEssayContext, entryText, essayQueryText, rank, resolveRefs } from "@/lib/ai/context";
 import {
   blueprintValidator,
   critiqueValidator,
@@ -152,13 +152,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     case "recommend_evidence": {
-      // Recommendation considers the whole library (most recent first, capped), not just what is linked.
+      // Candidates: the most relevant Available entries plus Ask-first entries already approved
+      // for this essay. Unapproved Ask-first and Private entries are never sent, even as suggestions.
+      const query = essayQueryText(essay, bundle.application);
+      const available = rank(query, bundle.entries.filter((e) => e.privacy === "available"), entryText).slice(0, CONTEXT_LIMITS.maxEntries).map((r) => r.item.id);
       const useCtx = buildEssayContext(
-        { ...bundle, linked: { storyIds: bundle.stories.slice(0, 12).map((s) => s.id), evidenceIds: bundle.evidence.slice(0, 40).map((e) => e.id), documentIds: [] } },
+        { ...bundle, linked: { entryIds: Array.from(new Set([...bundle.linked.entryIds, ...available])), documentIds: [] } },
         { includeDocuments: false, includeLessons: false },
       );
-      if (!(useCtx.brief.stories as unknown[] | undefined)?.length && !(useCtx.brief.profile_evidence as unknown[] | undefined)?.length) {
-        return jsonError(422, "Add stories to your Story Bank or entries to your Personal Profile first.");
+      if (!(useCtx.brief.evidence as unknown[] | undefined)?.length) {
+        return jsonError(422, "Add entries to your Story Bank (marked Available or approved for this essay) first.");
       }
       return runAi({
         supabase,
@@ -221,8 +224,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           const label = (ref: string) => {
             const t = ctx.refs[ref.trim().toUpperCase()];
             if (!t) return null;
-            if (t.type === "story") return `Story: ${bundle.stories.find((s) => s.id === t.id)?.title ?? ref}`;
-            if (t.type === "evidence") return `Profile: ${bundle.evidence.find((e) => e.id === t.id)?.title ?? ref}`;
+            if (t.type === "entry") return `Entry: ${bundle.entries.find((e) => e.id === t.id)?.title ?? ref}`;
             if (t.type === "document") return `Document: ${bundle.documents.find((d) => d.id === t.id)?.title ?? ref}`;
             return null;
           };

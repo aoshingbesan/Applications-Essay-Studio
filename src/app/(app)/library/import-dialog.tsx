@@ -8,11 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Pill, VerificationBadge } from "@/components/badges";
+import { ClassificationBadge, Pill } from "@/components/badges";
 import { importLetterStudioEvidence, listLetterStudioEvidence, type ImportableEvidence } from "@/server/letter-studio-import";
 import { handleResult } from "@/lib/client/result";
 
-/** Copies evidence recorded in Recommendation Letter Studio (same account) into the Story Bank. */
+/** Copies evidence recorded in Recommendation Letter Studio (same account) into Story Bank sections. */
 export function ImportFromLetterStudio() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -49,7 +49,7 @@ export function ImportFromLetterStudio() {
         <DialogHeader>
           <DialogTitle>Import from Recommendation Letter Studio</DialogTitle>
           <DialogDescription>
-            Copy evidence you recorded in Letter Studio into your Story Bank. Imports are copies: editing them here does not change Letter Studio. Verification carries over conservatively — check each story afterwards and add your lessons and motivation.
+            Copy evidence you recorded in Letter Studio into the matching Story Bank sections. Imports are copies: editing them here does not change Letter Studio. Anything flagged for checking stays flagged, and each entry takes its section&apos;s privacy default — review them afterwards and add your own reflections.
           </DialogDescription>
         </DialogHeader>
         {error ? (
@@ -80,8 +80,8 @@ export function ImportFromLetterStudio() {
                   <Label htmlFor={`imp-${i.id}`} className="block min-w-0 flex-1 font-normal">
                     <span className="block text-sm">{i.title}</span>
                     <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                      <Pill>{i.category.replace(/_/g, " ")}</Pill>
-                      <VerificationBadge value={i.verification} />
+                      <Pill>→ {i.section}</Pill>
+                      <ClassificationBadge value={i.classification} />
                       {i.period && <span>{i.period}</span>}
                       {i.alreadyImported && <span>Already imported</span>}
                     </span>
@@ -99,7 +99,7 @@ export function ImportFromLetterStudio() {
               const res = handleResult(await importLetterStudioEvidence(selected));
               setBusy(false);
               if (!res) return;
-              toast.success(`Imported ${res.imported} ${res.imported === 1 ? "story" : "stories"}${res.skipped ? ` (${res.skipped} already imported)` : ""}`);
+              toast.success(`Imported ${res.imported} ${res.imported === 1 ? "entry" : "entries"}${res.skipped ? ` (${res.skipped} already imported)` : ""}`);
               setOpen(false);
               router.refresh();
             }}

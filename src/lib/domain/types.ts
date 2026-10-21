@@ -4,12 +4,11 @@ import type {
   EssayStatus,
   EssayType,
   EvidenceClassification,
-  EvidenceSection,
   ExemplarAspect,
   ExemplarProvenance,
   ExtractionStatus,
-  StoryVerification,
 } from "./constants";
+import type { EntrySection, Privacy } from "@/lib/library/sections";
 import type { EssayDoc } from "@/lib/essay/doc";
 import type { ExemplarReport, GapQuestion, Outline, PromptAnalysis, Blueprint } from "@/lib/ai/schemas";
 
@@ -103,27 +102,20 @@ export interface SupportingDocument {
   updated_at: string;
 }
 
-export interface PersonalEvidence {
+/** One record in the Story Bank library: structured facts, an optional story and a narrative. */
+export interface LibraryEntry {
   id: string;
   user_id: string;
-  section: EvidenceSection;
+  section: EntrySection;
+  also_in: EntrySection[];
   title: string;
-  details: string | null;
+  summary: string | null;
   organisation: string | null;
+  role: string | null;
+  location: string | null;
   period: string | null;
-  classification: EvidenceClassification;
-  source: string | null;
-  source_document_id: string | null;
-  position: number;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Story {
-  id: string;
-  user_id: string;
-  title: string;
+  figures: string | null;
+  links: string | null;
   context: string | null;
   challenge: string | null;
   actions: string | null;
@@ -131,12 +123,15 @@ export interface Story {
   measurable_impact: string | null;
   lessons: string | null;
   motivation: string | null;
+  narrative: string | null;
   skills: string[];
   related_criteria: string[];
-  supporting_evidence: string | null;
   tags: string[];
-  period: string | null;
-  verification_status: StoryVerification;
+  classification: EvidenceClassification;
+  source: string | null;
+  privacy: Privacy;
+  source_ref: string | null;
+  position: number;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -259,8 +254,8 @@ export interface EssayVersion {
 export interface EvidenceLink {
   id: string;
   essay_id: string;
-  story_id: string | null;
-  evidence_id: string | null;
+  /** A library entry. Linking an "Ask first" entry to an essay is the user's approval to use it there. */
+  entry_id: string | null;
   document_id: string | null;
   note: string | null;
   position: number;
@@ -268,8 +263,7 @@ export interface EvidenceLink {
 
 /** The records that informed an AI output, stored with the job and on draft versions. */
 export interface SourceRefs {
-  story_ids?: string[];
-  evidence_ids?: string[];
+  entry_ids?: string[];
   document_ids?: string[];
   exemplar_ids?: string[];
   lesson_ids?: string[];
@@ -286,7 +280,8 @@ export type AiJobKind =
   | "draft"
   | "rewrite"
   | "critique"
-  | "readiness_review";
+  | "readiness_review"
+  | "section_questions";
 
 export interface AiJob {
   id: string;

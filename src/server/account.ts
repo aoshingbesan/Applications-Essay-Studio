@@ -74,7 +74,7 @@ async function removeAllFiles(supabase: ServerSupabase, userId: string) {
 export async function deleteAllData(confirmation: string): Promise<ActionResult> {
   if (confirmation !== "DELETE") return { ok: false, error: 'Type "DELETE" to confirm.', code: "validation" };
   return withUser(async ({ supabase, user }) => {
-    for (const table of ["applications", "exemplars", "story_bank_items", "personal_evidence", "supporting_documents", "ai_generation_jobs"] as const) {
+    for (const table of ["applications", "exemplars", "library_entries", "library_section_settings", "supporting_documents", "ai_generation_jobs"] as const) {
       const { error } = await supabase.from(table).delete().eq("user_id", user.id);
       if (error) return { ok: false, error: "Could not delete all data. Some records may remain; please try again." };
     }

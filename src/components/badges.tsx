@@ -3,13 +3,12 @@ import {
   ESSAY_STATUS_LABELS,
   EXTRACTION_LABELS,
   PROVENANCE_LABELS,
-  STORY_VERIFICATION_LABELS,
   type EssayStatus,
   type EvidenceClassification,
   type ExemplarProvenance,
   type ExtractionStatus,
-  type StoryVerification,
 } from "@/lib/domain/constants";
+import { PRIVACY_DESCRIPTIONS, PRIVACY_LABELS, type Privacy } from "@/lib/library/sections";
 import type { FindingLabel } from "@/lib/domain/types";
 import type { AnalysisDisplay } from "@/lib/exemplars/status";
 import { cn } from "@/lib/utils";
@@ -53,10 +52,14 @@ export function ClassificationBadge({ value }: { value: EvidenceClassification }
   return <Pill tone={CLASSIFICATION_TONE[value]}>{CLASSIFICATION_LABELS[value]}</Pill>;
 }
 
-const VERIFICATION_TONE: Record<StoryVerification, string> = { verified: good, self_reported: neutral, needs_confirmation: warn };
+const PRIVACY_TONE: Record<Privacy, string> = { private: bad, ask: warn, available: good };
 
-export function VerificationBadge({ value }: { value: StoryVerification }) {
-  return <Pill tone={VERIFICATION_TONE[value]}>{STORY_VERIFICATION_LABELS[value]}</Pill>;
+export function PrivacyBadge({ value }: { value: Privacy }) {
+  return (
+    <span title={PRIVACY_DESCRIPTIONS[value]}>
+      <Pill tone={PRIVACY_TONE[value]}>{PRIVACY_LABELS[value]}</Pill>
+    </span>
+  );
 }
 
 const PROVENANCE_TONE: Record<ExemplarProvenance, string> = { official_sample: good, independently_verified: good, uploader_reported: info, unknown: neutral };

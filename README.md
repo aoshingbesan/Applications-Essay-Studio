@@ -28,8 +28,8 @@ Essay Studio helps applicants turn true, specific evidence into original essays.
 | **Dashboard** | Active applications with status and progress derived from essay data, recent essays, upcoming deadlines, recently used evidence and recently analysed exemplars. First-time users get a guided empty state. |
 | **Applications** | Multiple applications, each with several essays. Every essay has its own prompt, limits, outline, draft, versions and reviews. Applications also hold a checklist, milestones, notes, documents and linked exemplars. You can duplicate an application's structure without copying drafts or documents, archive it, reopen it or mark it submitted. |
 | **Setup wizard** | Four resumable steps: opportunity details, essay requirements (multiple questions, exact prompt wording kept), supporting materials, and writing preferences. Progress is saved on the server after each step. |
-| **Personal Profile** | Fourteen sections, from education to impact goals. Each entry has a classification (Verified Fact, Quantified Achievement, Personal Reflection, Goal or Aspiration, or Unverified — Needs Confirmation) and a source. |
-| **Story Bank** | Optional STAR-style stories with skills, criteria, tags, period and verification. You can search, filter, archive, link stories to essays, and see which essays use each story. |
+| **Story Bank** | A personal evidence library in 13 sections: Background, Education, Tech, Health, CV and Professional Profile, Volunteering, Achievements, Leadership, Projects and Research, Community and Development, Failures and Growth, Future Goals, and Documents. Each entry combines structured facts (role, organisation, dates, figures), an optional STAR story, a long-form narrative in your own words, linked documents and a classification (Verified Fact … Goal or Aspiration … Unverified). One entry can appear in several sections without being copied. Each section has guidance on what to record and AI-guided follow-up questions. A Key facts view lists every structured fact. |
+| **Privacy and reuse controls** | Every entry is **Private** (never sent to the AI), **Ask first** (used only in an essay you approve it for) or **Available**. Each section has a default; Health defaults to Ask first. The server enforces this before anything reaches the AI, including guided questions and evidence recommendations. Relevant Ask-first entries are suggested for approval by local matching, without being sent. |
 | **Supporting Documents** | Private PDF, DOCX and TXT uploads with text extraction. Scanned PDFs are detected and flagged. You can inspect, correct or paste the text. |
 | **Exemplar Library** | Upload or paste exemplars with metadata and an explicit provenance. You check the extracted text before analysis. Each analysis is a structured report: overview, opening, structure, evidence, prompt alignment, techniques, limitations, transferable lessons and a reusable blueprint. The library has search across seven filters, side-by-side comparison, reanalysis, archive and delete, and lets you attach exemplars to applications and choose which lessons apply to which essay. |
 | **Essay Studio** | A three-panel workspace: navigation, requirements, evidence, references and draft history on the left; the editor in the centre; and the Workflow, Assist, Evidence, Exemplars and Review tabs on the right. Both side panels collapse, and become drawers on small screens. |
@@ -39,7 +39,7 @@ Essay Studio helps applicants turn true, specific evidence into original essays.
 | **Versions** | Autosave plus named versions. You can compare versions, restore one (the current text is backed up first), and rename, duplicate or archive drafts. |
 | **Export** | DOCX, PDF or text, for one essay or a selection. You can set the font, size, margins, line spacing and page numbers, and add an optional cover page (off by default). Exports contain only the essay text. |
 | **Settings** | Profile, default writing preferences, export defaults, an AI on/off switch with a data-flow explanation, connected services, theme, password, JSON data export, delete Essay Studio data, and delete the shared account (both apps). |
-| **Import from Letter Studio** | The Story Bank can copy evidence you recorded in Recommendation Letter Studio, using the same account. Imports are copies, never live links. Verification carries over conservatively, and repeat imports are skipped. |
+| **Import from Letter Studio** | The Story Bank can copy evidence you recorded in Recommendation Letter Studio, using the same account, into the matching sections. Imports are copies, never live links. Evidence flagged for checking stays flagged, each entry takes its section's privacy default, and repeat imports are skipped. |
 
 ## Stack
 
@@ -69,7 +69,7 @@ Essay Studio can share a Supabase project, and its user accounts, with **Recomme
 
 1. **Choose a project.** Use the existing Letter Studio project (recommended) or a new one.
 2. **Apply the migrations** in filename order, using either method:
-   - **SQL editor:** run `supabase/migrations/20261020000001_initial_schema.sql`, then `20261020000002_private_storage.sql`.
+   - **SQL editor:** run `supabase/migrations/20261020000001_initial_schema.sql`, `20261020000002_private_storage.sql`, then `20261021000003_story_bank_library.sql` (the Story Bank library; it moves any existing profile entries and stories into it).
    - **Supabase CLI:** in a project directory linked to this Supabase project, run `npx supabase db push`.
 3. **Expose the schema to the API.** Go to **Project Settings → Data API → Exposed schemas**, add `essay` to the list (keep `public` and anything else already there), and save. Without this, every page shows a database error.
 4. **Copy the keys.** Under **Project Settings → API**, copy the project URL and the publishable (or legacy anon) key into `.env.local`.
@@ -139,15 +139,16 @@ supabase/migrations/    schema, RLS, triggers, private storage
 | `applications` | Opportunity details, criteria, instructions, writing preferences, wizard progress, archive and submit state |
 | `application_requirements` | Checklist items and milestones |
 | `supporting_documents` | File metadata, SHA-256, extraction status and errors, extracted text |
-| `personal_evidence` | Profile entries with section, classification and source; full-text indexed |
-| `story_bank_items` | Stories with STAR fields, tags, criteria and verification; full-text indexed |
+| `library_entries` | Story Bank entries: section and cross-listed sections, structured facts, STAR story, narrative, classification, privacy, import source; full-text indexed |
+| `library_section_settings` | Per-user default privacy for each section |
+| `entry_documents` | Documents that substantiate an entry |
 | `exemplars` | Metadata, provenance, permission confirmation, source text, source hash (set by trigger) |
 | `exemplar_analyses` | Report JSON, keyed to source hash and spec version; at most one in progress per exemplar |
 | `exemplar_application_links` | Many-to-many between exemplars and applications |
 | `exemplar_selected_lessons` | Lessons chosen for an essay, copied so later reanalysis never silently changes a past draft's basis |
 | `essays` | Requirements, current draft (TipTap JSON) with an optimistic-concurrency `revision`, staged-workflow state |
 | `essay_versions` | Immutable snapshots (a trigger blocks content edits) with numbered versions, change summary, AI job and evidence references |
-| `essay_evidence_links` | Stories, profile entries and documents selected for an essay (exactly one target per row) |
+| `essay_evidence_links` | Entries and documents selected for an essay (exactly one target per row); linking an Ask-first entry is the approval to use it there |
 | `ai_generation_jobs` | Every AI call: kind, model, prompt version, settings, source references, prompt SHA-256, usage, output, status |
 | `essay_reviews` | Check and AI review findings with dismissals |
 
@@ -164,13 +165,13 @@ supabase/migrations/    schema, RLS, triggers, private storage
 
 - **Separate, versioned operations** live in `src/lib/ai/prompts/`: prompt analysis, gap questions, evidence recommendation, exemplar analysis, exemplar comparison, blueprint, outline, draft, rewrite, critique and readiness review. Each job records its prompt version and model.
 - **The context builder** (`src/lib/ai/context.ts`) sends only what an operation needs:
-  - the evidence the user linked, or if none, the most relevant items ranked by keyword overlap;
+  - the entries the user linked, or if none, the most relevant **Available** entries ranked by keyword overlap. Private entries are never included, and Ask-first entries only when approved (linked) for that essay;
   - relevant excerpts of linked documents, within a character budget;
   - exemplar lessons only when exemplar guidance is switched on, filtered by the chosen aspects.
 
   The full exemplar essay is never sent when drafting.
 - **Evidence status:** facts carry a status (accomplished, aspiration, reflection or unverified). The model may state accomplished facts as facts. It must write aspirations as plans, and must mark unverified claims as `[CONFIRM: …]` or omit them. Missing facts become `[ADD: …]` placeholders, and the review treats any left in the text as critical.
-- **Provenance:** short references (S1, E2, D1) map back to record IDs, and every draft version stores which stories, documents and lessons informed it.
+- **Provenance:** short references (E1, D1) map back to record IDs, and every draft version stores which entries, documents and lessons informed it.
 - **Prompt injection:** uploaded and pasted text is treated as untrusted data. It is serialised with `<` escaped inside a delimited data block, and the system prompt tells the model never to follow instructions found in it.
 - **Copying guard:** generated drafts and edits are checked for runs of eight or more words shared with attached exemplars. The review flags any such passage as a critical authenticity issue.
 - **Reliability:**

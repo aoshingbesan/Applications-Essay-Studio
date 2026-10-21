@@ -5,11 +5,10 @@ import {
   ESSAY_STATUSES,
   ESSAY_TYPES,
   EVIDENCE_CLASSIFICATIONS,
-  EVIDENCE_SECTIONS,
   EXEMPLAR_ASPECTS,
   EXEMPLAR_PROVENANCE,
-  STORY_VERIFICATION,
 } from "./constants";
+import { ENTRY_SECTIONS, PRIVACY_LEVELS } from "@/lib/library/sections";
 
 // Shared by React Hook Form on the client and by server actions, which re-validate everything.
 
@@ -117,34 +116,36 @@ export const profileSchema = z.object({
 });
 export type ProfileInput = z.infer<typeof profileSchema>;
 
-export const evidenceSchema = z.object({
-  section: z.enum(EVIDENCE_SECTIONS),
-  title: z.string().trim().min(1, "Title is required").max(300),
-  details: text(20000),
-  organisation: text(300),
-  period: text(200),
-  classification: z.enum(EVIDENCE_CLASSIFICATIONS),
-  source: text(1000),
-});
-export type EvidenceInput = z.infer<typeof evidenceSchema>;
-
-export const storySchema = z.object({
-  title: z.string().trim().min(1, "Title is required").max(300),
-  context: text(10000),
-  challenge: text(10000),
-  actions: text(10000),
-  outcome: text(10000),
-  measurable_impact: text(5000),
-  lessons: text(10000),
-  motivation: text(10000),
-  skills: tagList(30),
-  related_criteria: tagList(30, 300),
-  supporting_evidence: text(5000),
-  tags: tagList(30, 60),
-  period: text(200),
-  verification_status: z.enum(STORY_VERIFICATION),
-});
-export type StoryInput = z.infer<typeof storySchema>;
+export const entrySchema = z
+  .object({
+    section: z.enum(ENTRY_SECTIONS),
+    also_in: z.array(z.enum(ENTRY_SECTIONS)).max(ENTRY_SECTIONS.length),
+    title: z.string().trim().min(1, "Title is required").max(300),
+    summary: text(5000),
+    organisation: text(300),
+    role: text(300),
+    location: text(200),
+    period: text(200),
+    figures: text(2000),
+    links: text(2000),
+    context: text(10000),
+    challenge: text(10000),
+    actions: text(10000),
+    outcome: text(10000),
+    measurable_impact: text(5000),
+    lessons: text(10000),
+    motivation: text(10000),
+    narrative: text(30000),
+    skills: tagList(30),
+    related_criteria: tagList(30, 300),
+    tags: tagList(30, 60),
+    classification: z.enum(EVIDENCE_CLASSIFICATIONS),
+    source: text(1000),
+    privacy: z.enum(PRIVACY_LEVELS),
+  })
+  // An entry is never cross-listed into its own section.
+  .transform((v) => ({ ...v, also_in: v.also_in.filter((s) => s !== v.section) }));
+export type EntryInput = z.input<typeof entrySchema>;
 
 // ---------------------------------------------------------------------------
 // Documents and exemplars

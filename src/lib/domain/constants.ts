@@ -97,44 +97,6 @@ export const ESSAY_TYPE_GUIDANCE: Record<EssayType, string> = {
   custom: "Follow the official prompt closely; structure the answer around its explicit questions.",
 };
 
-export const EVIDENCE_SECTIONS = [
-  "background",
-  "education",
-  "academic_achievement",
-  "work_experience",
-  "leadership",
-  "volunteering",
-  "projects_research",
-  "awards",
-  "skills",
-  "challenges",
-  "career_goals",
-  "long_term_ambitions",
-  "impact_goals",
-  "motivations",
-] as const;
-export type EvidenceSection = (typeof EVIDENCE_SECTIONS)[number];
-
-export const EVIDENCE_SECTION_LABELS: Record<EvidenceSection, string> = {
-  background: "Personal background",
-  education: "Education",
-  academic_achievement: "Academic achievements",
-  work_experience: "Work experience",
-  leadership: "Leadership experience",
-  volunteering: "Volunteer activities",
-  projects_research: "Projects and research",
-  awards: "Awards and scholarships",
-  skills: "Skills and qualifications",
-  challenges: "Challenges and formative experiences",
-  career_goals: "Career goals",
-  long_term_ambitions: "Long-term ambitions",
-  impact_goals: "Social and development impact goals",
-  motivations: "Motivations",
-};
-
-/** Sections that describe the future: entries here are aspirations, never accomplishments. */
-export const FUTURE_SECTIONS: readonly EvidenceSection[] = ["career_goals", "long_term_ambitions", "impact_goals"];
-
 export const EVIDENCE_CLASSIFICATIONS = [
   "verified_fact",
   "quantified_achievement",
@@ -144,21 +106,20 @@ export const EVIDENCE_CLASSIFICATIONS = [
 ] as const;
 export type EvidenceClassification = (typeof EVIDENCE_CLASSIFICATIONS)[number];
 
+export const CLASSIFICATION_DESCRIPTIONS: Record<EvidenceClassification, string> = {
+  verified_fact: "Something you did or that happened — the AI may state it as fact.",
+  quantified_achievement: "A fact with figures you can stand behind.",
+  personal_reflection: "Your own perspective, feelings or interpretation.",
+  goal_aspiration: "Something you intend to do — always written as a plan, never as done.",
+  unverified: "Not yet confirmed — drafts leave it out or mark it [CONFIRM: …].",
+};
+
 export const CLASSIFICATION_LABELS: Record<EvidenceClassification, string> = {
   verified_fact: "Verified Fact",
   quantified_achievement: "Quantified Achievement",
   personal_reflection: "Personal Reflection",
   goal_aspiration: "Goal or Aspiration",
   unverified: "Unverified — Needs Confirmation",
-};
-
-export const STORY_VERIFICATION = ["verified", "self_reported", "needs_confirmation"] as const;
-export type StoryVerification = (typeof STORY_VERIFICATION)[number];
-
-export const STORY_VERIFICATION_LABELS: Record<StoryVerification, string> = {
-  verified: "Verified",
-  self_reported: "Self-reported",
-  needs_confirmation: "Needs confirmation",
 };
 
 export const EXEMPLAR_PROVENANCE = ["official_sample", "uploader_reported", "independently_verified", "unknown"] as const;

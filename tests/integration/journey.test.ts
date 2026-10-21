@@ -26,7 +26,9 @@ vi.mock("next/server", async (importOriginal) => {
 import { addEssay, addRequirementItem, createApplication, duplicateApplication, setSetupStep, updateWritingPreferences } from "@/server/applications";
 import { prepareUpload, registerDocument } from "@/server/documents";
 import { createExemplarFromText, deleteExemplar, setExemplarLink, setLessonSelected, setEssayExemplarSettings } from "@/server/exemplars";
-import { saveStory } from "@/server/library";
+import { saveEntry, setSectionPrivacy } from "@/server/library";
+import { POST as sectionQuestions } from "@/app/api/library/questions/route";
+import type { EntryInput } from "@/lib/domain/schemas";
 import {
   applyAiDocument,
   getVersion,
@@ -67,6 +69,8 @@ describe("complete application journey", () => {
   let essayId: string;
   let exemplarId: string;
   let storyId: string;
+  let askId: string;
+  let privateId: string;
 
   beforeAll(() => {
     process.env.AI_MOCK_RESPONSES = "1";
@@ -143,28 +147,88 @@ describe("complete application journey", () => {
     expect((await registerDocument({ path: `${USER_B}/documents/x.docx`, fileName: "x.docx", title: "X", doc_type: "cv", application_id: null, notes: "" })).ok).toBe(false);
   });
 
-  it("records a story and links it to the essay", async () => {
+  const entry = (over: Partial<EntryInput>): EntryInput => ({
+    section: "leadership",
+    also_in: [],
+    title: "Untitled",
+    summary: "",
+    organisation: "",
+    role: "",
+    location: "",
+    period: "",
+    figures: "",
+    links: "",
+    context: "",
+    challenge: "",
+    actions: "",
+    outcome: "",
+    measurable_impact: "",
+    lessons: "",
+    motivation: "",
+    narrative: "",
+    skills: [],
+    related_criteria: [],
+    tags: [],
+    classification: "verified_fact",
+    source: "",
+    privacy: "available",
+    ...over,
+  });
+
+  it("records Story Bank entries across sections and links one to the essay", async () => {
+    const docId = h.db.rows("supporting_documents")[0].id as string;
     storyId = ok(
-      await saveStory(null, {
-        title: "Founded a community coding club",
-        context: "Few girls in my town had computers.",
-        challenge: "No venue",
-        actions: "Negotiated library space and recruited mentors.",
-        outcome: "Grew to 60 members.",
-        measurable_impact: "60 members",
-        lessons: "",
-        motivation: "",
-        skills: ["leadership"],
-        related_criteria: [],
-        supporting_evidence: "",
-        tags: ["leadership"],
-        period: "2022–2024",
-        verification_status: "verified",
-      }),
+      await saveEntry(
+        null,
+        entry({
+          title: "Founded a community coding club",
+          also_in: ["volunteering", "leadership"],
+          context: "Few girls in my town had computers.",
+          challenge: "No venue",
+          actions: "Negotiated library space and recruited mentors.",
+          outcome: "Grew to 60 members.",
+          measurable_impact: "60 members",
+          skills: ["leadership"],
+          tags: ["leadership"],
+          period: "2022–2024",
+        }),
+        [docId],
+      ),
     ).id;
-    ok(await setEssayEvidenceLink(essayId, { type: "story", id: storyId }, true));
-    ok(await setEssayEvidenceLink(essayId, { type: "story", id: storyId }, true)); // idempotent
-    expect(h.db.rows("essay_evidence_links").filter((l) => l.story_id === storyId)).toHaveLength(1);
+    const saved = h.db.rows("library_entries").find((e) => e.id === storyId)!;
+    // An entry is never cross-listed into its own section.
+    expect(saved.also_in).toEqual(["volunteering"]);
+    expect(h.db.rows("entry_documents").filter((d) => d.entry_id === storyId).map((d) => d.document_id)).toEqual([docId]);
+
+    // Health defaults to Ask first; a second health entry is made Private.
+    askId = ok(await saveEntry(null, entry({ section: "health", title: "Caring for my mother during treatment", narrative: "ASK-ONLY leadership influencing", privacy: "ask" }))).id;
+    privateId = ok(await saveEntry(null, entry({ section: "health", title: "My diagnosis", narrative: "PRIVATE-ONLY leadership influencing", privacy: "private" }))).id;
+
+    ok(await setEssayEvidenceLink(essayId, { type: "entry", id: storyId }, true));
+    ok(await setEssayEvidenceLink(essayId, { type: "entry", id: storyId }, true)); // idempotent
+    expect(h.db.rows("essay_evidence_links").filter((l) => l.entry_id === storyId)).toHaveLength(1);
+  });
+
+  it("applies a section's default privacy, optionally to existing entries", async () => {
+    ok(await setSectionPrivacy("health", "private", false));
+    expect(h.db.rows("library_entries").find((e) => e.id === askId)!.privacy).toBe("ask");
+    ok(await setSectionPrivacy("health", "ask", true));
+    expect(h.db.rows("library_entries").find((e) => e.id === privateId)!.privacy).toBe("ask");
+    // Put the private entry back for the rest of the journey.
+    ok(await saveEntry(privateId, entry({ section: "health", title: "My diagnosis", narrative: "PRIVATE-ONLY leadership influencing", privacy: "private" })));
+  });
+
+  it("asks guided questions using only Available entries", async () => {
+    const res = await sectionQuestions(post("http://t/api/library/questions", { idempotencyKey: key(), section: "health" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // Both health entries are Ask first / Private: nothing about them is sent.
+    expect(body.withheld).toBe(2);
+    const job = h.db.rows("ai_generation_jobs").find((j) => j.id === body.jobId)!;
+    expect(job.source_refs).toEqual({ entry_ids: [] });
+
+    const lead = await (await sectionQuestions(post("http://t/api/library/questions", { idempotencyKey: key(), section: "leadership" }))).json();
+    expect(lead.questions[0].entryId).toBe(storyId);
   });
 
   it("uploads, analyses and caches an exemplar, and selects its lessons", async () => {
@@ -211,14 +275,18 @@ describe("complete application journey", () => {
     const outlineRes = await (await run({ op: "outline" })).json();
     expect(essayRow(essayId).outline_status).toBe("draft");
     // Outline evidence references are stored as readable labels, not per-request aliases.
-    expect(outlineRes.outline.sections[0].evidence_refs).toEqual(["Story: Founded a community coding club"]);
+    expect(outlineRes.outline.sections[0].evidence_refs).toEqual(["Entry: Founded a community coding club"]);
     ok(await saveOutline(essayId, essayRow(essayId).outline as Outline, true));
     expect(essayRow(essayId).outline_status).toBe("approved");
 
     const draft = await (await run({ op: "draft", includeHeadings: false })).json();
     expect(draft.ok).toBe(true);
     expect(draft.wordCount).toBeGreaterThan(5);
-    expect(draft.usedRefs.story_ids).toEqual([storyId]);
+    expect(draft.usedRefs.entry_ids).toEqual([storyId]);
+    // Private and unapproved Ask-first entries were not among the sources sent for the draft.
+    const draftJob = h.db.rows("ai_generation_jobs").find((j) => j.id === draft.jobId)!;
+    expect((draftJob.source_refs as { entry_ids: string[] }).entry_ids).not.toContain(privateId);
+    expect((draftJob.source_refs as { entry_ids: string[] }).entry_ids).not.toContain(askId);
     // Generating does not touch the essay until the user applies it.
     expect(essayRow(essayId).word_count).toBe(0);
 
@@ -347,6 +415,21 @@ describe("complete application journey", () => {
     expect(h.db.rows("exemplar_application_links").filter((l) => l.application_id === copyId)).toHaveLength(1);
   });
 
+  it("uses an Ask-first entry only in the essay it was approved for", async () => {
+    const before = h.db.rows("ai_generation_jobs").length;
+    ok(await setEssayEvidenceLink(essayId, { type: "entry", id: askId }, true));
+    ok(await setEssayEvidenceLink(essayId, { type: "entry", id: privateId }, true));
+    const res = await (await essayAi(post("http://t", { op: "gap_questions", idempotencyKey: key() }), params(essayId))).json();
+    expect(res.ok).toBe(true);
+    const job = h.db.rows("ai_generation_jobs").slice(before).find((j) => j.kind === "gap_questions")!;
+    const ids = (job.source_refs as { entry_ids: string[] }).entry_ids;
+    expect(ids).toContain(askId);
+    // Linking a Private entry does not make it usable.
+    expect(ids).not.toContain(privateId);
+    ok(await setEssayEvidenceLink(essayId, { type: "entry", id: askId }, false));
+    ok(await setEssayEvidenceLink(essayId, { type: "entry", id: privateId }, false));
+  });
+
   it("imports the user's Recommendation Letter Studio evidence as Story Bank copies", async () => {
     const mine = { title: "Hospital dashboard", category: "leadership", description: null, period: "2024", role: "Lead", individual_contribution: "Built it", problem: null, decisions: null, outcome: "Adopted", quantified_impact: null, supporting_url: null, information_source: null, verification_status: "needs_verification" };
     h.db.rows("public.evidence").push({ id: "3e000000-0000-4000-8000-00000000000a", user_id: USER_A, created_at: "2026-01-01", ...mine });
@@ -354,13 +437,13 @@ describe("complete application journey", () => {
 
     const listed = ok(await listLetterStudioEvidence());
     expect(listed.items.map((i) => i.title)).toEqual(["Hospital dashboard"]);
-    expect(listed.items[0]).toMatchObject({ alreadyImported: false, verification: "needs_confirmation" });
+    expect(listed.items[0]).toMatchObject({ alreadyImported: false, classification: "unverified", section: "My Leadership Story" });
 
     // Another user's evidence ID is never imported.
     const res = ok(await importLetterStudioEvidence(["3e000000-0000-4000-8000-00000000000a", "3e000000-0000-4000-8000-00000000000b"]));
     expect(res).toEqual({ imported: 1, skipped: 1 });
-    const story = h.db.rows("story_bank_items").find((s) => s.source_ref === "letter-studio:evidence:3e000000-0000-4000-8000-00000000000a")!;
-    expect(story).toMatchObject({ title: "Hospital dashboard", verification_status: "needs_confirmation", outcome: "Adopted" });
+    const imported = h.db.rows("library_entries").find((s) => s.source_ref === "letter-studio:evidence:3e000000-0000-4000-8000-00000000000a")!;
+    expect(imported).toMatchObject({ title: "Hospital dashboard", section: "leadership", classification: "unverified", outcome: "Adopted", privacy: "available" });
 
     expect(ok(await importLetterStudioEvidence(["3e000000-0000-4000-8000-00000000000a"]))).toEqual({ imported: 0, skipped: 1 });
     expect(ok(await listLetterStudioEvidence()).items[0].alreadyImported).toBe(true);

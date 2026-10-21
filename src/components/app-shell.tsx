@@ -15,7 +15,6 @@ import {
   PanelLeftOpen,
   PenLine,
   Settings,
-  UserRound,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -27,8 +26,7 @@ export const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/applications", label: "Applications", icon: FolderKanban },
   { href: "/studio", label: "Essay Studio", icon: PenLine },
-  { href: "/profile", label: "Personal Profile", icon: UserRound },
-  { href: "/stories", label: "Story Bank", icon: BookMarked },
+  { href: "/library", label: "Story Bank", icon: BookMarked },
   { href: "/exemplars", label: "Exemplar Library", icon: LibraryBig },
   { href: "/documents", label: "Supporting Documents", icon: FileStack },
   { href: "/settings", label: "Settings", icon: Settings },

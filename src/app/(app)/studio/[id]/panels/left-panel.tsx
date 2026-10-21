@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ChevronRight, ExternalLink, Plus } from "lucide-react";
-import { StatusBadge, Pill } from "@/components/badges";
+import { PrivacyBadge, StatusBadge, Pill } from "@/components/badges";
 import { ESSAY_TYPE_LABELS } from "@/lib/domain/constants";
 import { splitItems } from "@/lib/text/keywords";
 import { cn } from "@/lib/utils";
@@ -25,8 +25,7 @@ function Section({ title, count, defaultOpen = true, children }: { title: string
 
 export function LeftPanel({ data, api, headings, onNavigate }: { data: WorkspaceData; api: EditorApi; headings: { index: number; text: string }[]; onNavigate?: () => void }) {
   const { essay } = data;
-  const linkedStories = data.stories.filter((s) => data.links.some((l) => l.story_id === s.id));
-  const linkedEvidence = data.evidence.filter((e) => data.links.some((l) => l.evidence_id === e.id));
+  const linkedEntries = data.entries.filter((e) => data.links.some((l) => l.entry_id === e.id));
   const linkedDocs = data.documents.filter((d) => data.links.some((l) => l.document_id === d.id));
   const criteria = splitItems([essay.selection_criteria, data.application.selection_criteria].filter(Boolean).join("\n"));
 
@@ -113,21 +112,17 @@ export function LeftPanel({ data, api, headings, onNavigate }: { data: Workspace
         </Section>
       )}
 
-      <Section title="Story Bank" count={linkedStories.length + linkedEvidence.length} defaultOpen={false}>
-        {linkedStories.length + linkedEvidence.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No evidence selected — drafts will use the most relevant items automatically. Choose evidence in the Evidence tab.</p>
+      <Section title="Story Bank" count={linkedEntries.length} defaultOpen={false}>
+        {linkedEntries.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No entries selected — drafts use the most relevant Available entries automatically. Choose entries in the Evidence tab.</p>
         ) : (
           <ul className="space-y-1">
-            {linkedStories.map((s) => (
-              <li key={s.id}>
-                <Link href={`/stories/${s.id}`} className="hover:underline" onClick={onNavigate}>
-                  {s.title}
+            {linkedEntries.map((e) => (
+              <li key={e.id} className="flex items-center justify-between gap-2">
+                <Link href={`/library/entry/${e.id}`} className="truncate hover:underline" onClick={onNavigate}>
+                  {e.title}
                 </Link>
-              </li>
-            ))}
-            {linkedEvidence.map((e) => (
-              <li key={e.id} className="text-muted-foreground">
-                {e.title}
+                {e.privacy !== "available" && <PrivacyBadge value={e.privacy} />}
               </li>
             ))}
           </ul>

@@ -38,14 +38,13 @@ const DEFAULTS: Record<string, () => Row> = {
     archived_at: null,
   }),
   essay_versions: () => ({ title: "Draft", change_summary: null, ai_job_id: null, evidence_refs: {}, review_status: "unreviewed", archived_at: null }),
-  essay_evidence_links: () => ({ story_id: null, evidence_id: null, document_id: null, note: null, position: 0 }),
+  essay_evidence_links: () => ({ entry_id: null, document_id: null, note: null, position: 0 }),
   essay_reviews: () => ({ job_id: null, findings: [], summary: {}, dismissed_ids: [] }),
   ai_generation_jobs: () => ({ status: "pending", action: null, essay_id: null, exemplar_id: null, application_id: null, settings: {}, source_refs: {}, output: null, error_message: null, completed_at: null }),
   exemplars: () => ({ essay_category: "custom", provenance: "unknown", tags: [], source_text: "", word_count: 0, extraction_status: "pending", file_path: null, archived_at: null, permission_confirmed_at: null }),
   exemplar_analyses: () => ({ status: "queued", report: null, model: null, error_message: null, job_id: null, started_at: null, completed_at: null }),
   exemplar_selected_lessons: () => ({ analysis_id: null, essay_id: null, application_id: null }),
-  story_bank_items: () => ({ skills: [], related_criteria: [], tags: [], verification_status: "self_reported", archived_at: null }),
-  personal_evidence: () => ({ classification: "unverified", position: 0, archived_at: null, source_document_id: null }),
+  library_entries: () => ({ also_in: [], skills: [], related_criteria: [], tags: [], classification: "verified_fact", privacy: "available", source_ref: null, position: 0, archived_at: null, narrative: null }),
   supporting_documents: () => ({ application_id: null, doc_type: "other", extraction_status: "pending", word_count: 0, file_path: null }),
   application_requirements: () => ({ kind: "requirement", details: null, due_date: null, completed_at: null, position: 0 }),
 };
@@ -55,13 +54,14 @@ const UNIQUE: Record<string, { cols: string[]; where?: (r: Row) => boolean }[]> 
   ai_generation_jobs: [{ cols: ["user_id", "idempotency_key"] }],
   exemplar_analyses: [{ cols: ["exemplar_id"], where: (r) => r.status === "queued" || r.status === "running" }],
   essay_evidence_links: [
-    { cols: ["essay_id", "story_id"], where: (r) => r.story_id != null },
-    { cols: ["essay_id", "evidence_id"], where: (r) => r.evidence_id != null },
+    { cols: ["essay_id", "entry_id"], where: (r) => r.entry_id != null },
     { cols: ["essay_id", "document_id"], where: (r) => r.document_id != null },
   ],
   exemplar_selected_lessons: [{ cols: ["essay_id", "exemplar_id", "lesson_key"], where: (r) => r.essay_id != null }],
   exemplar_application_links: [{ cols: ["exemplar_id", "application_id"] }],
-  story_bank_items: [{ cols: ["user_id", "source_ref"], where: (r) => r.source_ref != null }],
+  library_entries: [{ cols: ["user_id", "source_ref"], where: (r) => r.source_ref != null }],
+  library_section_settings: [{ cols: ["user_id", "section"] }],
+  entry_documents: [{ cols: ["entry_id", "document_id"] }],
 };
 
 /** ON DELETE CASCADE relationships the server code relies on. */
@@ -69,9 +69,8 @@ const CASCADE: Record<string, [string, string][]> = {
   applications: [["essays", "application_id"], ["application_requirements", "application_id"], ["exemplar_application_links", "application_id"]],
   essays: [["essay_versions", "essay_id"], ["essay_evidence_links", "essay_id"], ["essay_reviews", "essay_id"], ["exemplar_selected_lessons", "essay_id"]],
   exemplars: [["exemplar_analyses", "exemplar_id"], ["exemplar_application_links", "exemplar_id"], ["exemplar_selected_lessons", "exemplar_id"]],
-  story_bank_items: [["essay_evidence_links", "story_id"]],
-  personal_evidence: [["essay_evidence_links", "evidence_id"]],
-  supporting_documents: [["essay_evidence_links", "document_id"]],
+  library_entries: [["essay_evidence_links", "entry_id"], ["entry_documents", "entry_id"]],
+  supporting_documents: [["essay_evidence_links", "document_id"], ["entry_documents", "document_id"]],
 };
 
 export class FakeDb {
@@ -196,6 +195,19 @@ class Query implements PromiseLike<Result> {
   }
   contains(c: string, vs: unknown[]) {
     this.filters.push((r) => vs.every((v) => (r[c] as unknown[]).includes(v)));
+    return this;
+  }
+  /** PostgREST "or" filters of the form "col.eq.value,col.cs.{value}". */
+  or(expr: string) {
+    const parts = expr.replace(/^\(|\)$/g, "").split(/,(?![^{]*})/);
+    const tests = parts.map((p) => {
+      const [col, op, ...rest] = p.split(".");
+      const val = rest.join(".");
+      if (op === "eq") return (r: Row) => same(r[col], val);
+      if (op === "cs") return (r: Row) => val.replace(/^\{|\}$/g, "").split(",").every((v) => (r[col] as unknown[] | undefined)?.includes(v));
+      throw new Error(`fake: unsupported or() operator ${op}`);
+    });
+    this.filters.push((r) => tests.some((t) => t(r)));
     return this;
   }
   textSearch(_c: string, q: string) {

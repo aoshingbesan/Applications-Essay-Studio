@@ -1,5 +1,5 @@
 import type { EssayContextData } from "@/lib/ai/context";
-import type { Application, Essay, PersonalEvidence, SelectedLesson, Story, SupportingDocument } from "@/lib/domain/types";
+import type { Application, Essay, LibraryEntry, SelectedLesson, SupportingDocument } from "@/lib/domain/types";
 import { docFromParagraphs } from "@/lib/essay/doc";
 
 export const application: Application = {
@@ -61,12 +61,40 @@ export const essay: Essay = {
   updated_at: "2026-10-01T00:00:00Z",
 };
 
-const base = { user_id: "u1", archived_at: null, created_at: "2026-01-01", updated_at: "2026-01-01" };
+const blank = {
+  user_id: "u1",
+  also_in: [],
+  summary: null,
+  organisation: null,
+  role: null,
+  location: null,
+  period: null,
+  figures: null,
+  links: null,
+  context: null,
+  challenge: null,
+  actions: null,
+  outcome: null,
+  measurable_impact: null,
+  lessons: null,
+  motivation: null,
+  narrative: null,
+  skills: [],
+  related_criteria: [],
+  tags: [],
+  source: null,
+  source_ref: null,
+  position: 0,
+  archived_at: null,
+  created_at: "2026-01-01",
+  updated_at: "2026-01-01",
+} satisfies Omit<LibraryEntry, "id" | "section" | "title" | "classification" | "privacy">;
 
-export const stories: Story[] = [
+export const entries: LibraryEntry[] = [
   {
-    ...base,
+    ...blank,
     id: "50000000-0000-4000-8000-000000000001",
+    section: "leadership",
     title: "Founded a community coding club",
     context: "Few girls in my town had access to computers.",
     challenge: "No funding and no venue.",
@@ -74,38 +102,21 @@ export const stories: Story[] = [
     outcome: "The club grew to 60 members in two years.",
     measurable_impact: "60 members; 12 alumni studying computing",
     lessons: "Leadership is mostly persuasion and persistence.",
-    motivation: "Digital inclusion",
+    narrative: "I still remember the first session: four students and one borrowed laptop.",
     skills: ["leadership", "influencing"],
     related_criteria: ["Leadership and influencing"],
-    supporting_evidence: null,
     tags: ["leadership"],
     period: "2022–2024",
-    verification_status: "verified",
+    classification: "verified_fact",
+    privacy: "available",
   },
-  {
-    ...base,
-    id: "50000000-0000-4000-8000-000000000002",
-    title: "Learnt to bake sourdough",
-    context: "A lockdown hobby.",
-    challenge: null,
-    actions: "Baked every weekend.",
-    outcome: null,
-    measurable_impact: null,
-    lessons: null,
-    motivation: null,
-    skills: [],
-    related_criteria: [],
-    supporting_evidence: null,
-    tags: ["hobby"],
-    period: null,
-    verification_status: "self_reported",
-  },
-];
-
-export const evidence: PersonalEvidence[] = [
-  { ...base, id: "e0000000-0000-4000-8000-000000000001", section: "education", title: "BSc Computer Science, University of Lagos", details: "First class honours", organisation: "University of Lagos", period: "2018–2022", classification: "verified_fact", source: "Transcript", source_document_id: null, position: 0 },
-  { ...base, id: "e0000000-0000-4000-8000-000000000002", section: "career_goals", title: "Lead a national digital inclusion programme", details: "Within ten years", organisation: null, period: null, classification: "goal_aspiration", source: null, source_document_id: null, position: 0 },
-  { ...base, id: "e0000000-0000-4000-8000-000000000003", section: "leadership", title: "Student union president", details: "Elected leadership role", organisation: null, period: "2021", classification: "unverified", source: null, source_document_id: null, position: 0 },
+  { ...blank, id: "50000000-0000-4000-8000-000000000002", section: "background", title: "Learnt to bake sourdough", context: "A lockdown hobby.", tags: ["hobby"], classification: "personal_reflection", privacy: "available" },
+  { ...blank, id: "e0000000-0000-4000-8000-000000000001", section: "education", title: "BSc Computer Science, University of Lagos", summary: "First class honours", organisation: "University of Lagos", period: "2018–2022", classification: "verified_fact", source: "Transcript", privacy: "available" },
+  { ...blank, id: "e0000000-0000-4000-8000-000000000002", section: "future_goals", title: "Lead a national digital inclusion programme", summary: "Within ten years", classification: "verified_fact", privacy: "available" },
+  { ...blank, id: "e0000000-0000-4000-8000-000000000003", section: "leadership", title: "Student union president", summary: "Elected leadership role", period: "2021", classification: "unverified", privacy: "available" },
+  // Sensitive entries: relevant to a leadership essay but must never reach the AI unless approved.
+  { ...blank, id: "a5000000-0000-4000-8000-000000000001", section: "health", title: "Supporting my mother's treatment while leading the club", narrative: "SENSITIVE-ASK-DETAIL leadership influencing", classification: "personal_reflection", privacy: "ask" },
+  { ...blank, id: "a5000000-0000-4000-8000-000000000002", section: "health", title: "My diagnosis", narrative: "SENSITIVE-PRIVATE-DETAIL leadership influencing", classification: "personal_reflection", privacy: "private" },
 ];
 
 export const documents: SupportingDocument[] = [
@@ -141,10 +152,9 @@ export function contextData(overrides: Partial<EssayContextData> = {}): EssayCon
     essay,
     application,
     preferences: { tone: "reflective", spelling: "british" },
-    evidence,
-    stories,
+    entries,
     documents,
-    linked: { storyIds: [], evidenceIds: [], documentIds: [] },
+    linked: { entryIds: [], documentIds: [] },
     lessons,
     exemplarTitles: { "70000000-0000-4000-8000-000000000001": "Sample SoP" },
     ...overrides,

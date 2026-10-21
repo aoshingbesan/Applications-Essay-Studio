@@ -6,10 +6,10 @@ import { EDIT_ACTIONS, type EditAction } from "../edit-actions";
 
 export { EDIT_ACTIONS, EDIT_ACTION_KEYS, type EditAction } from "../edit-actions";
 
-export const DRAFT_VERSION = "draft-2026-10-v1";
-export const REWRITE_VERSION = "rewrite-2026-10-v1";
-export const CRITIQUE_VERSION = "critique-2026-10-v1";
-export const READINESS_VERSION = "readiness-2026-10-v1";
+export const DRAFT_VERSION = "draft-2026-10-v2";
+export const REWRITE_VERSION = "rewrite-2026-10-v2";
+export const CRITIQUE_VERSION = "critique-2026-10-v2";
+export const READINESS_VERSION = "readiness-2026-10-v2";
 
 const WRITER = `You are an expert application-essay writer drafting on behalf of an applicant, from their own evidence, for them to edit and own. The essay must be original and must sound like a thoughtful person, not a template.`;
 
@@ -17,9 +17,9 @@ export function draftPrompt(brief: Record<string, unknown>, options: { includeHe
   return {
     system: `${WRITER}
 
-Write the essay following the approved outline: one section per outline section, in order. The outline names evidence by title ("Story: …", "Profile: …", "Document: …"); use the matching items in the data. Answer the exact prompt directly. Stay within the word limit — aim for 90–100% of the maximum when one is given and never exceed it; respect any minimum. ${options.includeHeadings ? "Give each section a short heading." : "Essays of this kind normally have no headings: set every section heading to an empty string."}
+Write the essay following the approved outline: one section per outline section, in order. The outline names evidence by title ("Entry: …", "Document: …"); use the matching items in the data. Answer the exact prompt directly. Stay within the word limit — aim for 90–100% of the maximum when one is given and never exceed it; respect any minimum. ${options.includeHeadings ? "Give each section a short heading." : "Essays of this kind normally have no headings: set every section heading to an empty string."}
 
-For each paragraph, list the evidence refs (S…, E…, D…) whose facts it uses; leave the list empty for paragraphs of pure reflection or argument. In flags, report: claims you marked [CONFIRM: …] or that rest on unverified items; information you marked [ADD: …]; prompt requirements the draft does not fully address; any conflicts between sources; and notes for the applicant.
+For each paragraph, list the evidence refs (E…, D…) whose facts it uses; leave the list empty for paragraphs of pure reflection or argument. In flags, report: claims you marked [CONFIRM: …] or that rest on unverified items; information you marked [ADD: …]; prompt requirements the draft does not fully address; any conflicts between sources; and notes for the applicant.
 
 ${VOICE_RULES}
 

@@ -15,7 +15,7 @@ const refreshTokens = new Map<string, string>();
 
 // Many-to-one embeds used by the app's select strings: [from table, embed] -> foreign key column.
 const EMBEDS: Record<string, string> = {
-  "essay_evidence_links.story_bank_items": "story_id",
+  "essay_evidence_links.library_entries": "entry_id",
   "essay_evidence_links.essays": "essay_id",
   "essays.applications": "application_id",
   "exemplar_analyses.exemplars": "exemplar_id",
@@ -138,6 +138,10 @@ async function rest(req: IncomingMessage, res: ServerResponse, url: URL, table: 
 
   for (const [key, value] of url.searchParams) {
     if (["select", "order", "limit", "offset", "on_conflict", "columns"].includes(key)) continue;
+    if (key === "or") {
+      q = q.or(decodeURIComponent(value)) as typeof q;
+      continue;
+    }
     const not = value.startsWith("not.");
     const v = not ? value.slice(4) : value;
     const dot = v.indexOf(".");

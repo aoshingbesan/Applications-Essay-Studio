@@ -6,10 +6,9 @@ import type {
   Essay,
   EvidenceLink,
   Exemplar,
-  PersonalEvidence,
+  LibraryEntry,
   Profile,
   SelectedLesson,
-  Story,
   SupportingDocument,
   WritingPreferences,
 } from "@/lib/domain/types";
@@ -34,11 +33,10 @@ export function mergePreferences(profile: WritingPreferences | undefined, app: W
 export async function loadEssayBundle(supabase: ServerSupabase, essayId: string): Promise<EssayBundle | null> {
   const { data: essay } = await supabase.from("essays").select("*").eq("id", essayId).maybeSingle<Essay>();
   if (!essay) return null;
-  const [app, profile, evidence, stories, documents, links, lessons, exemplarLinks] = await Promise.all([
+  const [app, profile, entries, documents, links, lessons, exemplarLinks] = await Promise.all([
     supabase.from("applications").select("*").eq("id", essay.application_id).maybeSingle<Application>(),
     supabase.from("profiles").select("*").maybeSingle<Profile>(),
-    supabase.from("personal_evidence").select("*").is("archived_at", null).order("section").order("position").returns<PersonalEvidence[]>(),
-    supabase.from("story_bank_items").select("*").is("archived_at", null).order("updated_at", { ascending: false }).returns<Story[]>(),
+    supabase.from("library_entries").select("*").is("archived_at", null).order("section").order("position").order("updated_at", { ascending: false }).returns<LibraryEntry[]>(),
     supabase.from("supporting_documents").select("*").order("created_at", { ascending: false }).returns<SupportingDocument[]>(),
     supabase.from("essay_evidence_links").select("*").eq("essay_id", essayId).order("position").returns<EvidenceLink[]>(),
     supabase.from("exemplar_selected_lessons").select("*").eq("essay_id", essayId).order("created_at").returns<SelectedLesson[]>(),
@@ -56,12 +54,10 @@ export async function loadEssayBundle(supabase: ServerSupabase, essayId: string)
     essay: { ...essay, gap_questions: Array.isArray(essay.gap_questions) ? essay.gap_questions : [] },
     application: app.data,
     preferences: mergePreferences(profile.data?.writing_preferences, app.data.writing_preferences),
-    evidence: evidence.data ?? [],
-    stories: stories.data ?? [],
+    entries: entries.data ?? [],
     documents: documents.data ?? [],
     linked: {
-      storyIds: l.flatMap((x) => (x.story_id ? [x.story_id] : [])),
-      evidenceIds: l.flatMap((x) => (x.evidence_id ? [x.evidence_id] : [])),
+      entryIds: l.flatMap((x) => (x.entry_id ? [x.entry_id] : [])),
       documentIds: l.flatMap((x) => (x.document_id ? [x.document_id] : [])),
     },
     lessons: lessons.data ?? [],
@@ -72,10 +68,13 @@ export async function loadEssayBundle(supabase: ServerSupabase, essayId: string)
   };
 }
 
-/** Text of the applicant's recorded evidence, used to check that figures in the essay are supported. */
+/**
+ * Text of the applicant's recorded evidence, used by the deterministic checks to see whether
+ * figures in the essay are supported. It never leaves the server, so every entry counts —
+ * including Private ones — to avoid flagging true figures as unsupported.
+ */
 export function evidenceCorpus(bundle: EssayBundle): string {
-  const stories = bundle.stories.map((s) => [s.title, s.context, s.challenge, s.actions, s.outcome, s.measurable_impact, s.lessons].filter(Boolean).join(" "));
-  const evidence = bundle.evidence.map((e) => [e.title, e.details, e.period].filter(Boolean).join(" "));
+  const entries = bundle.entries.map((e) => [e.title, e.summary, e.period, e.figures, e.context, e.challenge, e.actions, e.outcome, e.measurable_impact, e.lessons, e.narrative].filter(Boolean).join(" "));
   const docs = bundle.documents.filter((d) => bundle.linked.documentIds.includes(d.id)).map((d) => d.extracted_text ?? "");
-  return [...stories, ...evidence, ...docs, bundle.application.course_description ?? "", ...bundle.essay.gap_questions.map((q) => q.answer)].join("\n");
+  return [...entries, ...docs, bundle.application.course_description ?? "", ...bundle.essay.gap_questions.map((q) => q.answer)].join("\n");
 }

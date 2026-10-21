@@ -39,30 +39,51 @@ test("1. create an account and see the first-run dashboard", async () => {
   await expect(page.getByRole("heading", { name: "Getting started" })).toBeVisible();
 });
 
-test("2. build the personal profile and story bank", async () => {
-  await page.goto("/profile");
-  await page.getByRole("button", { name: "Add to Education" }).click();
-  await page.getByLabel("Title").fill("BSc Computer Science, University of Lagos");
+test("2. build the Story Bank across sections", async () => {
+  await page.goto("/library");
+  await expect(page.getByRole("heading", { name: "Story Bank" })).toBeVisible();
+  await page.getByRole("link", { name: /My Educational History/ }).click();
+  await page.getByRole("link", { name: "Add the first entry" }).click();
+  await page.getByLabel(/^Title/).fill("BSc Computer Science, University of Lagos");
   await page.getByRole("button", { name: "Save entry" }).click();
-  await expect(page.getByText("BSc Computer Science, University of Lagos")).toBeVisible();
+  await expect(page).toHaveURL(/\/library\/entry\/[0-9a-f-]{36}$/);
 
-  await page.goto("/stories/new");
-  await page.getByLabel("Story title").fill("Founded a community coding club");
-  await page.getByLabel("Your actions").fill("Negotiated free use of the library and recruited four volunteer mentors.");
+  await page.goto("/library/entry/new?section=leadership");
+  await page.getByLabel(/^Title/).fill("Founded a community coding club");
+  await page.getByText("The story").click();
+  await page.getByLabel("What you did").fill("Negotiated free use of the library and recruited four volunteer mentors.");
   await page.getByLabel("Outcome").fill("The club grew to 60 members.");
-  await page.getByRole("button", { name: "Save story" }).click();
-  await expect(page).toHaveURL(/\/stories\/[0-9a-f-]{36}$/);
+  await page.getByRole("button", { name: "Save entry" }).click();
   await expect(page.getByRole("heading", { name: "Founded a community coding club" })).toBeVisible();
+
+  // Health defaults to Ask first.
+  await page.goto("/library/health");
+  await expect(page.getByText(/Health details are sensitive/)).toBeVisible();
+  await page.getByRole("link", { name: "Add the first entry" }).click();
+  await expect(page.getByRole("radio", { name: /Ask first/ })).toBeChecked();
+  await page.getByLabel(/^Title/).fill("Caring for my mother taught me leadership and influencing");
+  await page.getByRole("button", { name: "Save entry" }).click();
+  await expect(page.getByRole("heading", { name: /Caring for my mother/ })).toBeVisible();
+
+  // Guided questions add answers to an entry's narrative.
+  await page.goto("/library/leadership");
+  await page.getByRole("button", { name: /Suggest questions/ }).click();
+  await page.getByLabel(/^Answer: How many people/).fill("Four mentors and up to sixty students each term.");
+  await page.getByRole("button", { name: "Add to entry" }).click();
+  await expect(page.getByText("Added to the entry's narrative.")).toBeVisible();
 });
 
 test("2b. import evidence from Recommendation Letter Studio", async ({ request }) => {
   await request.get(`http://127.0.0.1:54329/__seed-letter-evidence?email=${encodeURIComponent(email)}`);
-  await page.goto("/stories");
+  await page.goto("/library");
   await page.getByRole("button", { name: "Import from Letter Studio" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel(/Led the hospital data dashboard project/).check();
   await dialog.getByRole("button", { name: /Import 1 selected/ }).click();
+  await expect(page.getByText("Imported 1 entry")).toBeVisible();
+  await page.goto("/library/leadership");
   await expect(page.getByRole("heading", { name: "Led the hospital data dashboard project" })).toBeVisible();
+  await page.goto("/library");
   await page.getByRole("button", { name: "Import from Letter Studio" }).click();
   await expect(page.getByRole("dialog").getByText("Already imported")).toBeVisible();
   await page.keyboard.press("Escape");
@@ -123,6 +144,11 @@ test("5. generate an outline and an original draft in the Essay Studio", async (
   await page.getByRole("link", { name: /Leadership and influencing/ }).click();
   const editor = page.getByRole("textbox", { name: /essay text/ });
   await expect(editor).toBeVisible();
+
+  // The relevant Ask-first health entry is offered for approval, not used silently.
+  await page.getByRole("tab", { name: "Evidence" }).click();
+  await expect(page.getByRole("heading", { name: /needs your approval/ })).toBeVisible();
+  await expect(page.getByRole("region").getByText(/Caring for my mother/).first()).toBeVisible();
 
   await page.getByRole("tab", { name: "Workflow" }).click();
   await page.getByRole("button", { name: "Analyse prompt" }).click();
@@ -200,7 +226,7 @@ test("10. progress persists and appears on the dashboard after signing in again"
 
 test("11. pages fit a phone screen and support keyboard navigation", async () => {
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const path of ["/", "/applications", "/stories", "/exemplars", "/profile", "/documents", "/settings"]) {
+  for (const path of ["/", "/applications", "/library", "/library/leadership", "/library/facts", "/exemplars", "/documents", "/settings"]) {
     await page.goto(path);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `${path} scrolls horizontally`).toBeLessThanOrEqual(1);
@@ -221,9 +247,10 @@ test("12. screenshots of key screens (opt-in: SCREENSHOTS=dir)", async () => {
   const shots: [string, string][] = [
     ["dashboard", "/"],
     ["applications", "/applications"],
-    ["stories", "/stories"],
+    ["library", "/library"],
+    ["library-section", "/library/health"],
+    ["key-facts", "/library/facts"],
     ["exemplars", "/exemplars"],
-    ["profile", "/profile"],
     ["settings", "/settings"],
   ];
   for (const [name, path] of shots) {

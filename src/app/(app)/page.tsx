@@ -15,17 +15,17 @@ export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
   const { supabase } = await requireUser();
-  const [apps, profile, recentEssays, links, exemplars, storyCount, evidenceCount] = await Promise.all([
+  const [apps, profile, recentEssays, links, exemplars, storyCount] = await Promise.all([
     listApplications(supabase),
     supabase.from("profiles").select("display_name, full_name").maybeSingle<{ display_name: string | null; full_name: string | null }>(),
     supabase.from("essays").select(ESSAY_SUMMARY_COLUMNS).is("archived_at", null).order("updated_at", { ascending: false }).limit(5).returns<EssaySummary[]>(),
     supabase
       .from("essay_evidence_links")
-      .select("created_at, story_id, story_bank_items(id, title)")
-      .not("story_id", "is", null)
+      .select("created_at, entry_id, library_entries(id, title)")
+      .not("entry_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(12)
-      .returns<{ created_at: string; story_id: string; story_bank_items: { id: string; title: string } | null }[]>(),
+      .returns<{ created_at: string; entry_id: string; library_entries: { id: string; title: string } | null }[]>(),
     supabase
       .from("exemplar_analyses")
       .select("completed_at, exemplar_id, exemplars(id, title, provenance)")
@@ -33,8 +33,7 @@ export default async function DashboardPage() {
       .order("completed_at", { ascending: false })
       .limit(8)
       .returns<{ completed_at: string; exemplar_id: string; exemplars: { id: string; title: string } | null }[]>(),
-    supabase.from("story_bank_items").select("id", { count: "exact", head: true }).is("archived_at", null),
-    supabase.from("personal_evidence").select("id", { count: "exact", head: true }).is("archived_at", null),
+    supabase.from("library_entries").select("id", { count: "exact", head: true }).is("archived_at", null),
   ]);
 
   const name = profile.data?.display_name || profile.data?.full_name?.split(" ")[0];
@@ -43,9 +42,9 @@ export default async function DashboardPage() {
   const upcoming = apps
     .filter((a) => isUpcoming(a.application.deadline) && a.progress.status !== "submitted")
     .slice(0, 5);
-  const recentStories = Array.from(new Map((links.data ?? []).flatMap((l) => (l.story_bank_items ? [[l.story_bank_items.id, l.story_bank_items]] : []))).values()).slice(0, 5);
+  const recentStories = Array.from(new Map((links.data ?? []).flatMap((l) => (l.library_entries ? [[l.library_entries.id, l.library_entries]] : []))).values()).slice(0, 5);
   const recentExemplars = Array.from(new Map((exemplars.data ?? []).flatMap((x) => (x.exemplars ? [[x.exemplars.id, x]] : []))).values()).slice(0, 4);
-  const firstRun = apps.length === 0 && (storyCount.count ?? 0) === 0 && (evidenceCount.count ?? 0) === 0;
+  const firstRun = apps.length === 0 && (storyCount.count ?? 0) === 0;
 
   return (
     <PageContainer>
@@ -80,7 +79,7 @@ export default async function DashboardPage() {
           </p>
           <ol className="mt-6 grid gap-4 sm:grid-cols-3">
             {[
-              { n: 1, title: "Record your evidence", text: "Add education, achievements and goals to your Personal Profile, and your best experiences to the Story Bank.", href: "/stories/new", cta: "Add a story" },
+              { n: 1, title: "Build your Story Bank", text: "Record your background, education, projects, leadership and goals — facts and stories in your own words, with privacy you control.", href: "/library", cta: "Open the Story Bank" },
               { n: 2, title: "Create an application", text: "Record the opportunity, the exact essay prompts and word limits, and upload supporting documents.", href: "/applications/new", cta: "Create application" },
               { n: 3, title: "Learn from exemplars", text: "Optionally upload successful essays you may use, to analyse their techniques — never to copy them.", href: "/exemplars", cta: "Open library" },
             ].map((s) => (
@@ -189,24 +188,24 @@ export default async function DashboardPage() {
                 <ul className="space-y-1.5">
                   {recentStories.map((s) => (
                     <li key={s.id}>
-                      <Link href={`/stories/${s.id}`} className="text-sm hover:underline">
+                      <Link href={`/library/entry/${s.id}`} className="text-sm hover:underline">
                         {s.title}
                       </Link>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground">Stories you link to essays will appear here.</p>
+                <p className="text-sm text-muted-foreground">Story Bank entries you use in essays will appear here.</p>
               )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button asChild variant="outline" size="sm">
-                  <Link href="/stories">
+                  <Link href="/library">
                     <BookMarked /> Story Bank ({storyCount.count ?? 0})
                   </Link>
                 </Button>
                 <Button asChild variant="ghost" size="sm">
-                  <Link href="/stories/new">
-                    <Plus /> New story
+                  <Link href="/library/entry/new">
+                    <Plus /> New entry
                   </Link>
                 </Button>
               </div>
