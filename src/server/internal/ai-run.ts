@@ -32,7 +32,7 @@ export async function runAi<T, R extends Record<string, unknown>>(run: AiRun<T, 
     return jsonError(403, "AI features are switched off in your settings.", { code: "ai_disabled" });
   }
 
-  const begin = await beginJob(run.supabase, { ...run.job, model: configuredModel() ?? "unknown", prompt: run.prompt });
+  const begin = await beginJob(run.supabase, { ...run.job, model: configuredModel(run.operation) ?? "unknown", prompt: run.prompt });
   if (begin.kind === "rejected") return jsonError(begin.status, begin.error, { code: begin.status === 429 ? "rate_limited" : "conflict" });
   if (begin.kind === "replay") return NextResponse.json({ ok: true, jobId: begin.job.id, replay: true, ...(begin.job.output as R) });
 

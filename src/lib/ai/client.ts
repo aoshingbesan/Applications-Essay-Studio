@@ -1,7 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { z } from "zod";
-import { getAnthropicConfig, isAiMockMode } from "@/lib/env.server";
+import { getAnthropicConfig, isAiMockMode, type ModelTier } from "@/lib/env.server";
 import { toOutputSchema } from "./schemas";
 import { mockOutput } from "./mock";
 
@@ -16,8 +16,32 @@ export class AiError extends Error {
   }
 }
 
-// Models that accept the server-side refusal fallback ("default" routing).
+// Models that accept the server-side refusal fallback ("default" routing). Haiku has none.
 const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"]);
+
+/**
+ * Which model tier each operation runs on. Writing the essay itself and judging it stay on the
+ * strongest model; planning, edits and comparison use the mid tier; short guided questions the cheapest.
+ * Operations not listed run on "quality".
+ */
+const OPERATION_TIERS: Record<string, ModelTier> = {
+  draft: "quality",
+  outline: "quality",
+  readiness_review: "quality",
+  exemplar_analysis: "quality",
+  prompt_analysis: "standard",
+  gap_questions: "standard",
+  evidence_recommendation: "standard",
+  blueprint: "standard",
+  rewrite: "standard",
+  critique: "standard",
+  exemplar_comparison: "standard",
+  section_questions: "light",
+};
+
+export function tierFor(operation: string): ModelTier {
+  return OPERATION_TIERS[operation] ?? "quality";
+}
 
 export interface StructuredCall<T> {
   /** Operation name; used for logs and for test fixtures. */
@@ -41,9 +65,14 @@ export function isAiConfigured(): boolean {
   return isAiMockMode() || getAnthropicConfig() !== null;
 }
 
-export function configuredModel(): string | null {
-  if (isAiMockMode()) return "mock";
-  return getAnthropicConfig()?.model ?? null;
+/** The model an operation will run on, or every tier's model when no operation is given. */
+export function configuredModel(operation: string): string | null;
+export function configuredModel(): Record<ModelTier, string> | null;
+export function configuredModel(operation?: string): string | Record<ModelTier, string> | null {
+  if (isAiMockMode()) return operation ? "mock" : { quality: "mock", standard: "mock", light: "mock" };
+  const models = getAnthropicConfig()?.models;
+  if (!models) return null;
+  return operation ? models[tierFor(operation)] : models;
 }
 
 /** Validates parsed model output; malformed output is a retryable failure, never saved. */
@@ -73,13 +102,14 @@ export async function callStructured<T>(call: StructuredCall<T>): Promise<Struct
   if (!config) throw new AiError("AI features are not configured. Add ANTHROPIC_API_KEY to the server environment.", "unavailable", false);
 
   const client = new Anthropic({ apiKey: config.apiKey, maxRetries: 2, timeout: 280_000 });
-  const useFallback = FALLBACK_MODELS.has(config.model);
+  const model = config.models[tierFor(call.operation)];
+  const useFallback = FALLBACK_MODELS.has(model);
 
   let message: Anthropic.Beta.BetaMessage;
   try {
     const stream = client.beta.messages.stream(
       {
-        model: config.model,
+        model,
         max_tokens: call.maxTokens,
         ...(useFallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
         output_config: { effort: call.effort, format: { type: "json_schema", schema: toOutputSchema(call.validator) } },

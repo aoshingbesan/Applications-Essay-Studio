@@ -91,7 +91,7 @@ function ExportDefaults({ initial }: { initial: ExportSettings }) {
   );
 }
 
-export function SettingsForms({ email, profile, ai }: { email: string; profile: Profile; ai: { configured: boolean; model: string | null } }) {
+export function SettingsForms({ email, profile, ai }: { email: string; profile: Profile; ai: { configured: boolean; models: { quality: string; standard: string; light: string } | null } }) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [displayName, setDisplayName] = useState(profile.display_name ?? "");
@@ -149,8 +149,16 @@ export function SettingsForms({ email, profile, ai }: { email: string; profile: 
           </div>
           <div>
             <dt className="text-muted-foreground">AI provider</dt>
-            <dd>{ai.configured ? `Anthropic Claude — configured (${ai.model})` : "Not configured (ANTHROPIC_API_KEY missing on the server)"}</dd>
+            <dd>{ai.configured ? "Anthropic Claude — configured" : "Not configured (ANTHROPIC_API_KEY missing on the server)"}</dd>
           </div>
+          {ai.configured && ai.models && (
+            <div className="sm:col-span-2">
+              <dt className="text-muted-foreground">Models</dt>
+              <dd className="text-xs">
+                Drafting, outlines, readiness review and exemplar analysis: {ai.models.quality} · Planning, edits and comparisons: {ai.models.standard} · Guided questions: {ai.models.light}
+              </dd>
+            </div>
+          )}
         </dl>
         <div className="flex items-center gap-3">
           <Switch

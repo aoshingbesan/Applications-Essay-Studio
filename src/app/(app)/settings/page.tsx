@@ -16,7 +16,7 @@ export default async function SettingsPage() {
       <SettingsForms
         email={user.email ?? ""}
         profile={profile ?? { id: user.id, display_name: null, full_name: null, writing_preferences: {}, export_settings: {}, ai_enabled: true }}
-        ai={{ configured: isAiConfigured(), model: configuredModel() }}
+        ai={{ configured: isAiConfigured(), models: configuredModel() }}
       />
     </PageContainer>
   );

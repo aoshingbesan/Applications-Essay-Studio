@@ -13,7 +13,7 @@ import {
   blueprintValidator,
   critiqueValidator,
 } from "@/lib/ai/schemas";
-import { validateOutput, AiError } from "@/lib/ai/client";
+import { validateOutput, AiError, tierFor } from "@/lib/ai/client";
 import { mockOutput } from "@/lib/ai/mock";
 
 const ALL = {
@@ -65,5 +65,18 @@ describe("AI response validation", () => {
     }
     const outline = toOutputSchema(outlineValidator) as { properties: { sections: { minItems?: number } } };
     expect(outline.properties.sections.minItems).toBe(1);
+  });
+});
+
+describe("model routing", () => {
+  it("keeps essay writing and judgement on the strongest model", () => {
+    for (const op of ["draft", "outline", "readiness_review", "exemplar_analysis"]) expect(tierFor(op)).toBe("quality");
+  });
+  it("runs planning and edits on the mid tier and guided questions on the light tier", () => {
+    for (const op of ["prompt_analysis", "gap_questions", "evidence_recommendation", "blueprint", "rewrite", "critique", "exemplar_comparison"]) expect(tierFor(op)).toBe("standard");
+    expect(tierFor("section_questions")).toBe("light");
+  });
+  it("defaults unknown operations to the strongest model rather than silently downgrading", () => {
+    expect(tierFor("something_new")).toBe("quality");
   });
 });

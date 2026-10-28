@@ -47,7 +47,7 @@ Essay Studio helps applicants turn true, specific evidence into original essays.
 - Tailwind CSS 4, shadcn/ui (Radix), Lucide icons, React Hook Form, Zod 4
 - TipTap 3 rich-text editor
 - Supabase: Postgres, Auth, private Storage and Row Level Security
-- Anthropic Claude API through `@anthropic-ai/sdk`, called only from server code (default model `claude-opus-5-5`)
+- Anthropic Claude API through `@anthropic-ai/sdk`, called only from server code (Opus 5.5 for writing, Sonnet 5.5 for planning and edits, Haiku 5.5 for guided questions)
 - `unpdf` for PDF text extraction, `mammoth` for DOCX extraction, `docx` for Word export, `pdf-lib` for PDF export
 - Vitest, Playwright, and SQL tests against a throwaway Postgres
 
@@ -92,13 +92,23 @@ The second migration creates a private bucket, `essay-files`, with a 10 MB limit
 1. Create an API key at [console.anthropic.com](https://console.anthropic.com).
 2. Set `ANTHROPIC_API_KEY` in `.env.local` and in Vercel. It is read only on the server; never prefix it with `NEXT_PUBLIC_`.
 3. Optional settings:
-   - `ANTHROPIC_MODEL` overrides the model (default `claude-opus-5-5`).
+   - `ANTHROPIC_MODEL`, `ANTHROPIC_MODEL_STANDARD`, `ANTHROPIC_MODEL_LIGHT` override the three model tiers (see below).
    - `AI_RATE_LIMIT_PER_HOUR` sets the per-user limit (default 40).
+
+AI models and cost — each operation runs on one of three tiers (mapping in `src/lib/ai/client.ts`):
+
+| Tier | Default model | Operations |
+|---|---|---|
+| quality | `claude-opus-5-5` | draft, outline, readiness review, exemplar analysis |
+| standard | `claude-sonnet-5-5` | prompt analysis, gap questions, evidence recommendation, blueprint, rewrite/edit actions, critique, exemplar comparison |
+| light | `claude-haiku-5-5` | Story Bank guided questions |
+
+Operations not listed default to the quality tier. The model that served each request is recorded on its `ai_generation_jobs` row along with token usage. To put everything back on Opus, set `ANTHROPIC_MODEL_STANDARD` and `ANTHROPIC_MODEL_LIGHT` to `claude-opus-5-5`.
 
 How requests are made:
 
 - Every call streams with a structured JSON-schema output format. Effort is `high` for analysis, outlines, drafts and reviews, and `medium` for edits and planning.
-- On supported models, calls use Anthropic's server-side refusal fallback (`fallbacks: "default"`).
+- Opus and Sonnet calls use Anthropic's server-side refusal fallback (`fallbacks: "default"`); Haiku has none, so a declined guided-question request simply shows an error.
 - Every output is validated with Zod before it is saved or shown. Malformed output is reported as a retryable failure; nothing is saved.
 
 **Data flow.** An AI action sends the relevant requirements, the evidence you selected (or the most relevant items), excerpts of linked documents and the text being worked on to Anthropic. Retention follows the terms of the Anthropic account the deployment uses; this app makes no zero-retention claim. Users can switch AI off in Settings, after which nothing is sent.

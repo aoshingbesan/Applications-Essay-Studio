@@ -73,7 +73,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     kind: "exemplar_analysis",
     exemplarId: id,
     idempotencyKey: parsed.data.idempotencyKey,
-    model: configuredModel() ?? "unknown",
+    model: configuredModel("exemplar_analysis") ?? "unknown",
     promptVersion: EXEMPLAR_ANALYSIS_VERSION,
     settings: { spec_version: EXEMPLAR_SPEC_VERSION, source_hash: exemplar.source_hash },
     prompt,
