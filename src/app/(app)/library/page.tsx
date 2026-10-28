@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth";
 import { SECTIONS, sectionTitle, type EntrySection, type Privacy } from "@/lib/library/sections";
 import type { LibraryEntry } from "@/lib/domain/types";
 import { ImportFromLetterStudio } from "./import-dialog";
+import { ExportStoryBank } from "./export-menu";
 
 export const metadata: Metadata = { title: "Story Bank" };
 
@@ -45,6 +46,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
         actions={
           <>
             <ImportFromLetterStudio />
+            <ExportStoryBank />
             <Button asChild variant="outline">
               <Link href="/library/facts">
                 <ListChecks /> Key facts
